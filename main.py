@@ -36,11 +36,12 @@ class SimpleERAConsole:
         time.sleep(1)
         self.PRINT("全部载入~")
         return init
-    def PRINT(self, text=None):
+    def PRINT(self, text=None,colors=(255,255,255)):
         """输出文本到控制台 - 无输入时输出空行"""
         # 如果没有传入文本或文本为空，输出空行
+        color_tuple = colors if isinstance(colors, tuple) and len(colors) >= 3 else (255, 255, 255)
         if text is None or text == "":
-            self.output_lines.append("")
+            self.output_lines.append(("",color_tuple))
             # 限制缓冲区大小
             if len(self.output_lines) > self.max_lines:
                 self.output_lines = self.output_lines[-self.max_lines:]
@@ -80,7 +81,8 @@ class SimpleERAConsole:
             lines.append(current_line)
         
         # 将新行添加到输出缓冲区
-        self.output_lines.extend(lines)
+        for line in lines:
+            self.output_lines.append((line,color_tuple))
         
         # 限制缓冲区大小
         if len(self.output_lines) > self.max_lines:
@@ -136,8 +138,8 @@ class SimpleERAConsole:
         self.screen.fill((0, 0, 0))
         
         # 绘制输出文本
-        for i, line in enumerate(self.output_lines):
-            text_surface = self.font.render(line, True, (255, 255, 255))
+        for i, (line,color) in enumerate(self.output_lines):
+            text_surface = self.font.render(line, True,color)
             y_pos = 10 + i * self.line_height
             self.screen.blit(text_surface, (10, y_pos))
         
@@ -170,6 +172,12 @@ class thethings:
         self.console=SimpleERAConsole()
         self.input=""
         self.main()
+    def text(self):
+        self.console.PRINT('[1]测试文本')
+        if self.input=='1':
+            self.console.PRINT("GREEN",(0,255,0))
+            self.console.PRINT("BLUE",(0,0,255))
+            self.console.PRINT("RED",(255,0,0))
     def map(self):
         import json
         with open('./json/map/map.json', 'r', encoding='utf-8') as f:
@@ -201,7 +209,9 @@ class thethings:
                 running = False
             elif self.input:#==============================================
                             #===================在这里输入你的事件===========
+                        
                 self.map()
+                self.text()
                 self.console.PRINT("")#默认没有任何事件处理
         
         # 处理退出事件
