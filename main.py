@@ -1,9 +1,308 @@
+# main.py 修改部分
 import pygame
 import sys
 import time
 import json
 import os
+from dynamic_loader import DynamicLoader, ContentType  # 导入动态加载器
 
+class SimpleERAConsole:
+    from init import initall
+    
+    def __init__(self):
+        pygame.init()
+        self.screen_width = 1600
+        self.screen_height = 1000
+        self.screen = pygame.display.set_mode((self.screen_width, self.screen_height))
+        pygame.display.set_caption("ERA Console - 动态加载器版本")
+        
+        # 字体设置
+        self.font = pygame.font.Font('./font/luoli.ttf', 24)
+        self.line_height = 30
+        
+        # 输入区域高度
+        self.input_area_height = 40
+        
+        # 初始化动态加载器
+        self.loader = DynamicLoader(
+            screen_width=self.screen_width,
+            screen_height=self.screen_height,
+            font=self.font,
+            input_area_height=self.input_area_height,
+            log_file="./logs/game_log.txt"
+        )
+        
+        # 输入相关
+        self.input_text = ""
+        self.input_history = []  # 输入历史记录
+        self.input_history_index = -1  # 当前输入历史索引
+        self.cursor_visible = True
+        self.cursor_timer = 0
+        self.running = True
+        
+        # 初始化音乐盒和音乐列表
+        self.music_box = None
+        self.music_list = {}
+        self.current_music_name = None
+        
+        # 添加示例文本用于测试滚动
+        #self._add_test_content()
+    
+
+    # main.py - 修复 PRINT 方法
+    def PRINT(self, text=None, colors=(255, 255, 255)):
+        """输出文本到控制台 - 使用动态加载器"""
+        # !!! 关键修复：正确处理空文本 !!!
+        # 确保处理text为None的情况
+        if text is None:
+            text = ""
+        
+        # 记录到动态加载器
+        self.loader.add_text(text, colors)
+        
+        # 刷新显示
+        self._draw_display()
+        pygame.display.flip()
+    def PRINT_MENU(self, items, colors=(200, 200, 255)):
+        """输出菜单到控制台"""
+        self.loader.add_menu(items, colors)
+        self._draw_display()
+        pygame.display.flip()
+    
+    def PRINT_DIVIDER(self, char="─", length=40, colors=(150, 150, 150)):
+        """输出分割线"""
+        self.loader.add_divider(char, length, colors)
+        self._draw_display()
+        pygame.display.flip()
+    
+    # main.py - 修复 INPUT 方法中的空行处理
+
+    def INPUT(self):
+        """获取用户输入 - 支持功能键"""
+        self.input_text = ""
+        waiting_for_input = True
+        
+        while waiting_for_input and self.running:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    self.quit()
+                    return None
+                
+                # 处理动态加载器事件（滚动等）
+                if self.loader.handle_event(event):
+                    self._draw_display()
+                    pygame.display.flip()
+                    continue
+                
+                elif event.type == pygame.KEYUP:
+                    # 功能键处理
+                    if event.key == pygame.K_RETURN:
+                        user_input = self.input_text.strip()
+                        
+                        # !!! 关键修复：显示用户输入，然后添加空行 !!!
+                        if user_input:
+                            # 保存到输入历史
+                            self.input_history.append(user_input)
+                            self.input_history_index = -1
+                            
+                            # 显示用户输入（不同颜色）
+                            self.loader.add_text(f"> {user_input}", (255, 255, 200))
+                        
+                        # 总是添加一个空行，即使输入为空
+                        self.loader.add_text("")  # 空行
+                        
+                        # 重置输入文本并返回
+                        self.input_text = ""
+                        waiting_for_input = False
+                        return user_input
+                    
+                    elif event.key == pygame.K_BACKSPACE:
+                        self.input_text = self.input_text[:-1]
+                    
+                    elif event.key == pygame.K_UP:
+                        # 向上浏览输入历史
+                        if self.input_history:
+                            if self.input_history_index < len(self.input_history) - 1:
+                                self.input_history_index += 1
+                                self.input_text = self.input_history[-(self.input_history_index + 1)]
+                    
+                    elif event.key == pygame.K_DOWN:
+                        # 向下浏览输入历史
+                        if self.input_history_index > 0:
+                            self.input_history_index -= 1
+                            self.input_text = self.input_history[-(self.input_history_index + 1)]
+                        elif self.input_history_index == 0:
+                            self.input_history_index = -1
+                            self.input_text = ""
+                    
+                    else:
+                        # 只接受可打印字符
+                        if event.unicode.isprintable():
+                            self.input_text += event.unicode
+            
+            # 绘制界面
+            self._draw_display()
+            
+            # 光标闪烁效果
+            self.cursor_timer += 1
+            if self.cursor_timer > 30:  # 每半秒切换一次
+                self.cursor_visible = not self.cursor_visible
+                self.cursor_timer = 0
+            
+            pygame.display.flip()
+            pygame.time.Clock().tick(60)
+        
+        return None
+    def _init_background_music(self):
+        """初始化背景音乐 - 从global_key['musicbox']获取音乐列表"""
+        try:
+            # 检查是否有init属性
+            if not hasattr(self, 'init') or not self.init:
+                self.PRINT("初始化数据未加载，无法初始化音乐", colors=(255, 200, 200))
+                return
+            
+            # 从全局变量获取音乐列表
+            if hasattr(self.init, 'global_key') and 'musicbox' in self.init.global_key:
+                self.music_list = self.init.global_key['musicbox']
+                self.PRINT(f"已加载音乐列表，共{len(self.music_list)}首音乐")
+                
+                # 如果有音乐，播放第一首
+                if self.music_list:
+                    first_music_name = list(self.music_list.keys())[0]
+                    first_music_path = self.music_list[first_music_name]
+                    
+                    # 检查音乐文件是否存在
+                    if os.path.exists(first_music_path):
+                        self.music_box = MusicBox(first_music_path)
+                        self.current_music_name = first_music_name
+                        # 播放背景音乐（无限循环）
+                        self.music_box.play(loops=-1)
+                        self.PRINT(f"背景音乐已加载: {first_music_name}")
+                    else:
+                        self.PRINT(f"背景音乐文件不存在: {first_music_path}", colors=(255, 200, 200))
+                        self.PRINT("请检查音乐文件路径", colors=(255, 200, 200))
+                else:
+                    self.PRINT("音乐列表为空，无法播放背景音乐", colors=(255, 200, 200))
+            else:
+                self.PRINT("全局变量中没有找到musicbox键", colors=(255, 200, 200))
+        except Exception as e:
+            self.PRINT(f"初始化音乐失败: {e}", colors=(255, 200, 200))
+    
+    def _draw_display(self):
+        """绘制整个界面"""
+        # 清屏
+        self.screen.fill((0, 0, 0))
+        
+        # 绘制动态加载器的内容
+        self.loader.draw(self.screen)
+        
+        # 绘制输入文本和光标（始终在左下角）
+        input_y = self.screen_height - self.input_area_height + 10
+        input_surface = self.font.render("> " + self.input_text, True, (255, 255, 255))
+        self.screen.blit(input_surface, (10, input_y))
+        
+        # 绘制光标
+        if self.cursor_visible:
+            cursor_x = 10 + self.font.size("> " + self.input_text)[0]
+            pygame.draw.line(
+                self.screen,
+                (255, 255, 255),
+                (cursor_x, input_y),
+                (cursor_x, input_y + 20),
+                2
+            )
+        
+        # 绘制滚动提示
+        scroll_info = self.loader.get_scroll_info()
+        if scroll_info["total_items"] > scroll_info["visible_items"]:
+            # 显示滚动位置信息
+            scroll_text = f"行: {scroll_info['total_items'] - scroll_info['scroll_offset'] - scroll_info['visible_items'] + 1}-{scroll_info['total_items'] - scroll_info['scroll_offset']} / {scroll_info['total_items']}"
+            info_surface = self.font.render(scroll_text, True, (150, 150, 150))
+            info_x = self.screen_width - info_surface.get_width() - 20
+            self.screen.blit(info_surface, (info_x, self.screen_height - 60))
+            
+            # 显示滚动提示
+            if not scroll_info["at_bottom"]:
+                hint_surface = self.font.render("↑ 滚动查看历史", True, (100, 150, 255))
+                self.screen.blit(hint_surface, (self.screen_width - hint_surface.get_width() - 20, 10))
+    
+    def clear_screen(self):
+        """清屏"""
+        self.loader.clear_history()
+        self.PRINT("控制台已清空", (200, 255, 200))
+    
+    def show_scroll_info(self):
+        """显示滚动信息"""
+        scroll_info = self.loader.get_scroll_info()
+        self.PRINT_DIVIDER("=", 40)
+        self.PRINT("滚动信息:", (200, 200, 255))
+        self.PRINT(f"总行数: {scroll_info['total_items']}", (200, 200, 200))
+        self.PRINT(f"可见行数: {scroll_info['visible_items']}", (200, 200, 200))
+        self.PRINT(f"滚动偏移: {scroll_info['scroll_offset']}", (200, 200, 200))
+        self.PRINT(f"是否在顶部: {'是' if scroll_info['at_top'] else '否'}", (200, 200, 200))
+        self.PRINT(f"是否在底部: {'是' if scroll_info['at_bottom'] else '否'}", (200, 200, 200))
+        self.PRINT_DIVIDER("=", 40)
+    
+    # ... 保持其他方法不变 ...
+    
+    def init_all(self):
+        """初始化所有组件，包括数据和音乐"""
+        try:
+            from init import initall
+            init = initall("./csv/")
+            self.init = init  # 这里设置self.init属性
+            
+            # 使用动态加载器输出
+            self.loader.add_divider("=", 60, (100, 200, 100))
+            self.loader.add_text("少女祈祷中...", (200, 255, 200))
+            
+            for i in init.charaters_key:
+                chara_name = init.charaters_key[i].get('名前', '未知角色')
+                self.loader.add_text(f"已加载角色：{chara_name}", (200, 220, 255))
+            
+            time.sleep(1)
+            self.loader.add_text("角色全部载入~", (100, 255, 100))
+            
+            for i in init.global_key:
+                self.loader.add_text(f"已加载全局设置：{i}", (200, 200, 255))
+            
+            time.sleep(1)
+            self.loader.add_text("全部载入~", (100, 255, 100))
+            self.loader.add_divider("=", 60, (100, 200, 100))
+            
+            # 初始化背景音乐
+            self._init_background_music()
+            
+            # 滚动到底部
+            self.loader.scroll_to_bottom()
+            
+            return init
+        except Exception as e:
+            self.PRINT(f"初始化失败: {e}", colors=(255, 200, 200))
+            self.PRINT("按任意键继续...")
+            self.INPUT()
+            return None
+    
+    def quit(self):
+        """退出程序"""
+        # 停止音乐
+        if self.music_box:
+            self.music_box.stop()
+        
+        # 记录退出日志
+        self.loader.add_divider("=", 60, (255, 100, 100))
+        self.loader.add_text("游戏结束，感谢游玩！", (255, 200, 100))
+        self.loader.add_text(f"会话日志已保存到: {self.loader.log_file}", (200, 200, 200))
+        
+        # 短暂显示退出信息
+        self._draw_display()
+        pygame.display.flip()
+        pygame.time.delay(1000)
+        
+        self.running = False
+        pygame.quit()
+        sys.exit()
+# 在 main.py 的 thethings 类中添加新功能
 class MusicBox:
     def __init__(self, url=None):
         """
@@ -138,235 +437,6 @@ class MusicBox:
             return "播放中"
         else:
             return "已停止"
-
-class SimpleERAConsole:
-    from init import initall
-    
-    def __init__(self):
-        pygame.init()
-        self.screen_width = 1600
-        self.screen_height = 1000
-        self.screen = pygame.display.set_mode((self.screen_width, self.screen_height))
-        pygame.display.set_caption("ERA Console")
-        
-        # 字体设置
-        self.font = pygame.font.Font('./font/luoli.ttf', 24)
-        self.line_height = 30
-        
-        # 文本缓冲区
-        self.output_lines = []
-        self.max_lines = (self.screen_height - 40) // self.line_height  # 底部留出输入空间
-        
-        # 输入相关
-        self.input_text = ""
-        self.cursor_visible = True
-        self.cursor_timer = 0
-        self.running = True
-        
-        # 初始化音乐盒和音乐列表
-        self.music_box = None
-        self.music_list = {}  # 音乐列表 {音乐名: 音乐路径}
-        self.current_music_name = None
-        
-        # 注意：这里不能直接调用init，因为init属性还不存在
-        # 我们先初始化基本组件，然后在main中调用init_all
-        
-    def init_all(self):
-        """初始化所有组件，包括数据和音乐"""
-        try:
-            from init import initall
-            init = initall("./csv/")
-            self.init = init  # 这里设置self.init属性
-            
-            self.PRINT("少女祈祷中...")
-            for i in init.charaters_key:
-                self.PRINT(f"已加载角色：{init.charaters_key[i].get('名前')}")
-            time.sleep(1)
-            self.PRINT("角色全部载入~")
-            for i in init.global_key:
-                self.PRINT(f"已加载全局设置：{i}")
-            time.sleep(1)
-            self.PRINT("全部载入~")
-            
-            # 初始化背景音乐
-            self._init_background_music()
-            
-            return init
-        except Exception as e:
-            self.PRINT(f"初始化失败: {e}", colors=(255, 200, 200))
-            self.PRINT("按任意键继续...")
-            self.INPUT()
-            return None
-    
-    def _init_background_music(self):
-        """初始化背景音乐 - 从global_key['musicbox']获取音乐列表"""
-        try:
-            # 检查是否有init属性
-            if not hasattr(self, 'init') or not self.init:
-                self.PRINT("初始化数据未加载，无法初始化音乐", colors=(255, 200, 200))
-                return
-            
-            # 从全局变量获取音乐列表
-            if hasattr(self.init, 'global_key') and 'musicbox' in self.init.global_key:
-                self.music_list = self.init.global_key['musicbox']
-                self.PRINT(f"已加载音乐列表，共{len(self.music_list)}首音乐")
-                
-                # 如果有音乐，播放第一首
-                if self.music_list:
-                    first_music_name = list(self.music_list.keys())[0]
-                    first_music_path = self.music_list[first_music_name]
-                    
-                    # 检查音乐文件是否存在
-                    if os.path.exists(first_music_path):
-                        self.music_box = MusicBox(first_music_path)
-                        self.current_music_name = first_music_name
-                        # 播放背景音乐（无限循环）
-                        self.music_box.play(loops=-1)
-                        self.PRINT(f"背景音乐已加载: {first_music_name}")
-                    else:
-                        self.PRINT(f"背景音乐文件不存在: {first_music_path}", colors=(255, 200, 200))
-                        self.PRINT("请检查音乐文件路径", colors=(255, 200, 200))
-                else:
-                    self.PRINT("音乐列表为空，无法播放背景音乐", colors=(255, 200, 200))
-            else:
-                self.PRINT("全局变量中没有找到musicbox键", colors=(255, 200, 200))
-        except Exception as e:
-            self.PRINT(f"初始化音乐失败: {e}", colors=(255, 200, 200))
-    
-    def PRINT(self, text=None, colors=(255, 255, 255)):
-        """输出文本到控制台 - 无输入时输出空行"""
-        # 如果没有传入文本或文本为空，输出空行
-        color_tuple = colors if isinstance(colors, tuple) and len(colors) >= 3 else (255, 255, 255)
-        if text is None or text == "":
-            self.output_lines.append(("", color_tuple))
-            # 限制缓冲区大小
-            if len(self.output_lines) > self.max_lines:
-                self.output_lines = self.output_lines[-self.max_lines:]
-            # 刷新显示
-            self._draw_display()
-            pygame.display.flip()
-            return
-        
-        # 处理制表符
-        text = text.replace('\t', '    ')  # 将制表符转换为4个空格
-        lines = []
-        current_line = ""
-        
-        for char in text:
-            # 处理换行符
-            if char == '\n':
-                if current_line:
-                    lines.append(current_line)
-                    current_line = ""
-                lines.append("")  # 空行
-                continue
-            
-            # 测试添加当前字符后的宽度
-            test_line = current_line + char
-            text_width = self.font.size(test_line)[0]
-            
-            # 如果超出屏幕宽度
-            if text_width > self.screen_width - 20:
-                if current_line:
-                    lines.append(current_line)
-                current_line = char
-            else:
-                current_line = test_line
-        
-        # 添加最后一行
-        if current_line:
-            lines.append(current_line)
-        
-        # 将新行添加到输出缓冲区
-        for line in lines:
-            self.output_lines.append((line, color_tuple))
-        
-        # 限制缓冲区大小
-        if len(self.output_lines) > self.max_lines:
-            self.output_lines = self.output_lines[-self.max_lines:]
-        
-        # 刷新显示
-        self._draw_display()
-        pygame.display.flip()
-    
-    def INPUT(self):
-        """获取用户输入"""
-        self.input_text = ""
-        waiting_for_input = True
-        
-        while waiting_for_input and self.running:
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    self.quit()
-                    return None
-                
-                elif event.type == pygame.KEYUP:
-                    if event.key == pygame.K_RETURN:
-                        user_input = self.input_text
-                        self.input_text = ""
-                        waiting_for_input = False
-                        return user_input
-                    
-                    elif event.key == pygame.K_BACKSPACE:
-                        self.input_text = self.input_text[:-1]
-                    
-                    else:
-                        # 只接受可打印字符
-                        if event.unicode.isprintable():
-                            self.input_text += event.unicode
-            
-            # 绘制界面
-            self._draw_display()
-            
-            # 光标闪烁效果
-            self.cursor_timer += 1
-            if self.cursor_timer > 30:  # 每半秒切换一次
-                self.cursor_visible = not self.cursor_visible
-                self.cursor_timer = 0
-            
-            pygame.display.flip()
-            pygame.time.Clock().tick(60)
-        
-        return None
-    
-    def _draw_display(self):
-        """绘制整个界面"""
-        # 清屏
-        self.screen.fill((0, 0, 0))
-        
-        # 绘制输出文本
-        for i, (line, color) in enumerate(self.output_lines):
-            text_surface = self.font.render(line, True, color)
-            y_pos = 10 + i * self.line_height
-            self.screen.blit(text_surface, (10, y_pos))
-        
-        # 绘制输入文本和光标（始终在左下角）
-        input_y = self.screen_height - 30
-        input_surface = self.font.render("> " + self.input_text, True, (255, 255, 255))
-        self.screen.blit(input_surface, (10, input_y))
-        
-        # 绘制光标
-        if self.cursor_visible:
-            cursor_x = 10 + self.font.size("> " + self.input_text)[0]
-            pygame.draw.line(
-                self.screen,
-                (255, 255, 255),
-                (cursor_x, input_y),
-                (cursor_x, input_y + 20),
-                2
-            )
-    
-    def quit(self):
-        """退出程序"""
-        # 停止音乐
-        if self.music_box:
-            self.music_box.stop()
-        
-        self.running = False
-        pygame.quit()
-        sys.exit()
-
-# 使用示例
 class thethings:
     def __init__(self):
         self.console = SimpleERAConsole()
@@ -375,161 +445,6 @@ class thethings:
         self.input = ""
         self.charater_pwds = {}
         self.main()
-    
-    def text(self):
-        self.console.PRINT('[1]测试文本')
-        if self.input == '1':
-            self.console.PRINT("GREEN", (0, 255, 0))
-            self.console.PRINT("BLUE", (0, 0, 255))
-            self.console.PRINT("RED", (255, 0, 0))
-    
-    def getpwd(self, id='0'):
-        self.console.PRINT('[0]查询位置')
-        # 检查charater_pwds中是否有该角色
-        if id in self.charater_pwds:
-            mypwd = self.charater_pwds[id]
-            if self.input == '0':
-                self.console.PRINT(f"{self.console.init.charaters_key[id].get('名前')}当前位置....")
-                self.console.PRINT(f"[{self.console.init.global_key['map'][mypwd['大地图']]}]" + f"[{self.console.init.global_key['map'][mypwd['小地图']]}]")
-        else:
-            self.console.PRINT(f"角色ID {id} 不存在", colors=(255, 200, 200))
-    
-    def map(self):
-        import json
-        try:
-            with open('./json/map/map.json', 'r', encoding='utf-8') as f:
-                map_data = json.load(f)
-            
-            # 先为所有角色设置默认位置
-            for i in self.console.init.chara_ids:
-                self.charater_pwds[i] = {
-                    '大地图': '10000',
-                    '小地图': '10001'
-                }
-            
-            # 根据map.json更新角色位置
-            for big_map, small_maps in map_data.items():
-                for small_map, charater_list in small_maps.items():
-                    for charater_id in charater_list:
-                        if charater_id in self.charater_pwds:
-                            self.charater_pwds[charater_id] = {
-                                '大地图': big_map,
-                                '小地图': small_map
-                            }
-        except Exception as e:
-            self.console.PRINT(f"加载地图数据失败: {e}", colors=(255, 200, 200))
-    
-    def shop(self):
-        self.console.PRINT("[3]商店")
-        if self.input == '3':
-            running = True
-            page = 0
-            items_per_page = 12
-            
-            # 检查是否有物品数据
-            if not hasattr(self.console.init, 'global_key') or 'Item' not in self.console.init.global_key:
-                self.console.PRINT("商店数据未加载", colors=(255, 200, 200))
-                self.console.PRINT("按任意键继续...")
-                self.console.INPUT()
-                return
-            
-            items_data = self.console.init.global_key['Item']
-            item_ids = list(items_data.keys())
-            
-            while running:
-                self.console.output_lines = []
-                
-                self.console.PRINT("════════════ 商店 ════════════")
-                
-                if len(item_ids) == 0:
-                    self.console.PRINT("商店目前没有商品")
-                else:
-                    total_pages = (len(item_ids) + items_per_page - 1) // items_per_page
-                    start_idx = page * items_per_page
-                    end_idx = min(start_idx + items_per_page, len(item_ids))
-                    
-                    self.console.PRINT(f"第 {page + 1}/{total_pages} 页")
-                    self.console.PRINT("─" * 40)
-                    
-                    for i in range(start_idx, end_idx):
-                        item_id = item_ids[i]
-                        item_info = items_data[item_id]
-                        
-                        item_name = item_info.get('name', f'物品{item_id}')
-                        price = item_info.get('price', 0)
-                        
-                        display_num = i - start_idx + 1
-                        self.console.PRINT(f"{display_num:2d}. {item_name:<20} {price:>5}金币")
-                    
-                    self.console.PRINT("─" * 40)
-                    self.console.PRINT("n:下一页  p:上一页  数字:查看详情  e:退出")
-                    self.console.PRINT("请输入选择:")
-                    
-                    thisinput = self.console.INPUT().lower()
-                    
-                    if thisinput == 'e':
-                        running = False
-                    elif thisinput == 'n':
-                        if page < total_pages - 1:
-                            page += 1
-                        else:
-                            self.console.PRINT("已经是最后一页了")
-                            self.console.PRINT("按任意键继续...")
-                            self.console.INPUT()
-                    elif thisinput == 'p':
-                        if page > 0:
-                            page -= 1
-                        else:
-                            self.console.PRINT("已经是第一页了")
-                            self.console.PRINT("按任意键继续...")
-                            self.console.INPUT()
-                    elif thisinput.isdigit():
-                        selected = int(thisinput)
-                        if 1 <= selected <= (end_idx - start_idx):
-                            actual_index = start_idx + selected - 1
-                            item_id = item_ids[actual_index]
-                            item_info = items_data[item_id]
-                            
-                            self.console.output_lines = []
-                            
-                            item_name = item_info.get('name', f'物品{item_id}')
-                            price = item_info.get('price', 0)
-                            description = item_info.get('idn', '暂无简介')
-                            
-                            self.console.PRINT(f"════════════ 物品详情 ════════════")
-                            self.console.PRINT(f"名称: {item_name}")
-                            self.console.PRINT(f"价格: {price}金币")
-                            self.console.PRINT("")
-                            self.console.PRINT("简介:")
-                            self.console.PRINT(f"  {description}")
-                            self.console.PRINT("")
-                            
-                            other_keys = [k for k in item_info.keys() if k not in ['name', 'price', 'idn']]
-                            if other_keys:
-                                self.console.PRINT("其他属性:")
-                                for key in other_keys:
-                                    self.console.PRINT(f"  {key}: {item_info[key]}")
-                            
-                            self.console.PRINT("")
-                            self.console.PRINT("1. 购买")
-                            self.console.PRINT("2. 返回商店")
-                            self.console.PRINT("请选择:")
-                            
-                            choice = self.console.INPUT()
-                            
-                            if choice == '1':
-                                self.console.PRINT(f"购买了 {item_name}，花费 {price} 金币！")
-                                self.console.PRINT("按任意键继续...")
-                                self.console.INPUT()
-                        else:
-                            self.console.PRINT("无效的选择")
-                            self.console.PRINT("按任意键继续...")
-                            self.console.INPUT()
-                    else:
-                        self.console.PRINT("无效的命令")
-                        self.console.PRINT("按任意键继续...")
-                        self.console.INPUT()
-    
     def music_control(self):
         """音乐控制功能"""
         if not self.console.music_box:
@@ -563,16 +478,9 @@ class thethings:
                 self.console.PRINT(f"播放位置: {current_pos:.1f}秒")
             
             self.console.PRINT("─" * 40)
-            self.console.PRINT("[1] 播放音乐")
-            self.console.PRINT("[2] 暂停音乐")
-            self.console.PRINT("[3] 继续播放")
-            self.console.PRINT("[4] 停止音乐")
-            self.console.PRINT("[5] 选择音乐")
-            self.console.PRINT("[6] 增大音量")
-            self.console.PRINT("[7] 减小音量")
-            self.console.PRINT("[8] 设置音量")
-            self.console.PRINT("[9] 显示音乐列表")
-            self.console.PRINT("[0] 返回")
+            self.console.PRINT("[1] 播放音乐        [2] 暂停音乐        [3] 继续播放        [4] 停止音乐")
+            self.console.PRINT("[5] 选择音乐        [6] 增大音量        [7] 减小音量        [8] 设置音量")
+            self.console.PRINT("[9] 显示音乐列表        [0] 返回")
             self.console.PRINT("请输入选择:")
             
             choice = self.console.INPUT()
@@ -695,22 +603,166 @@ class thethings:
                 self.console.PRINT("按任意键继续...")
                 self.console.INPUT()
     
+    def map(self):
+        import json
+        try:
+            with open('./json/map/map.json', 'r', encoding='utf-8') as f:
+                map_data = json.load(f)
+            
+            # 先为所有角色设置默认位置
+            for i in self.console.init.chara_ids:
+                self.charater_pwds[i] = {
+                    '大地图': '10000',
+                    '小地图': '10001'
+                }
+            
+            # 根据map.json更新角色位置
+            for big_map, small_maps in map_data.items():
+                for small_map, charater_list in small_maps.items():
+                    for charater_id in charater_list:
+                        if charater_id in self.charater_pwds:
+                            self.charater_pwds[charater_id] = {
+                                '大地图': big_map,
+                                '小地图': small_map
+                            }
+        except Exception as e:
+            self.console.PRINT(f"加载地图数据失败: {e}", colors=(255, 200, 200))
+    def text(self):
+        self.console.PRINT('[1]测试文本')
+        if self.input == '1':
+            self.console.PRINT("GREEN", (0, 255, 0))
+            self.console.PRINT("BLUE", (0, 0, 255))
+            self.console.PRINT("RED", (255, 0, 0))
+    def getpwd(self, id='0'):
+        # 检查charater_pwds中是否有该角色
+        if id in self.charater_pwds:
+            mypwd = self.charater_pwds[id]
+            if self.input == '2':
+                self.console.PRINT(f"{self.console.init.charaters_key[id].get('名前')}当前位置....")
+                self.console.PRINT(f"[{self.console.init.global_key['map'][mypwd['大地图']]}]" + f"[{self.console.init.global_key['map'][mypwd['小地图']]}]")
+        else:
+            self.console.PRINT(f"角色ID {id} 不存在", colors=(255, 200, 200))
+    def shop(self):
+        self.console.PRINT("[3]商店")
+        if self.input == '3':
+            running = True
+            page = 0
+            items_per_page = 12
+            
+            # 检查是否有物品数据
+            if not hasattr(self.console.init, 'global_key') or 'Item' not in self.console.init.global_key:
+                self.console.PRINT("商店数据未加载", colors=(255, 200, 200))
+                self.console.PRINT("按任意键继续...")
+                self.console.INPUT()
+                return
+            
+            items_data = self.console.init.global_key['Item']
+            item_ids = list(items_data.keys())
+            
+            while running:
+                self.console.output_lines = []
+                
+                self.console.PRINT("════════════ 商店 ════════════")
+                
+                if len(item_ids) == 0:
+                    self.console.PRINT("商店目前没有商品")
+                else:
+                    total_pages = (len(item_ids) + items_per_page - 1) // items_per_page
+                    start_idx = page * items_per_page
+                    end_idx = min(start_idx + items_per_page, len(item_ids))
+                    
+                    self.console.PRINT(f"第 {page + 1}/{total_pages} 页")
+                    self.console.PRINT("─" * 40)
+                    
+                    for i in range(start_idx, end_idx):
+                        item_id = item_ids[i]
+                        item_info = items_data[item_id]
+                        
+                        item_name = item_info.get('name', f'物品{item_id}')
+                        price = item_info.get('price', 0)
+                        
+                        display_num = i - start_idx + 1
+                        self.console.PRINT(f"{display_num:2d}. {item_name:<20} {price:>5}金币")
+                    
+                    self.console.PRINT("─" * 40)
+                    self.console.PRINT("n:下一页  p:上一页  数字:查看详情  e:退出")
+                    self.console.PRINT("请输入选择:")
+                    
+                    thisinput = self.console.INPUT().lower()
+                    
+                    if thisinput == 'e':
+                        running = False
+                    elif thisinput == 'n':
+                        if page < total_pages - 1:
+                            page += 1
+                        else:
+                            self.console.PRINT("已经是最后一页了")
+                            self.console.PRINT("按任意键继续...")
+                            self.console.INPUT()
+                    elif thisinput == 'p':
+                        if page > 0:
+                            page -= 1
+                        else:
+                            self.console.PRINT("已经是第一页了")
+                            self.console.PRINT("按任意键继续...")
+                            self.console.INPUT()
+                    elif thisinput.isdigit():
+                        selected = int(thisinput)
+                        if 1 <= selected <= (end_idx - start_idx):
+                            actual_index = start_idx + selected - 1
+                            item_id = item_ids[actual_index]
+                            item_info = items_data[item_id]
+                            
+                            self.console.output_lines = []
+                            
+                            item_name = item_info.get('name', f'物品{item_id}')
+                            price = item_info.get('price', 0)
+                            description = item_info.get('idn', '暂无简介')
+                            
+                            self.console.PRINT(f"════════════ 物品详情 ════════════")
+                            self.console.PRINT(f"名称: {item_name}")
+                            self.console.PRINT(f"价格: {price}金币")
+                            self.console.PRINT("")
+                            self.console.PRINT("简介:")
+                            self.console.PRINT(f"  {description}")
+                            self.console.PRINT("")
+                            
+                            other_keys = [k for k in item_info.keys() if k not in ['name', 'price', 'idn']]
+                            if other_keys:
+                                self.console.PRINT("其他属性:")
+                                for key in other_keys:
+                                    self.console.PRINT(f"  {key}: {item_info[key]}")
+                            
+                            self.console.PRINT("")
+                            self.console.PRINT("1. 购买")
+                            self.console.PRINT("2. 返回商店")
+                            self.console.PRINT("请选择:")
+                            
+                            choice = self.console.INPUT()
+                            
+                            if choice == '1':
+                                self.console.PRINT(f"购买了 {item_name}，花费 {price} 金币！")
+                                self.console.PRINT("按任意键继续...")
+                                self.console.INPUT()
+                        else:
+                            self.console.PRINT("无效的选择")
+                            self.console.PRINT("按任意键继续...")
+                            self.console.INPUT()
+                    else:
+                        self.console.PRINT("无效的命令")
+                        self.console.PRINT("按任意键继续...")
+                        self.console.INPUT()
+    
     def start(self):
-        self.console.PRINT("[0]start")
         if self.input == '0':
             running = True
             while running:
                 self.input = self.console.INPUT()
+                self.console.PRINT("[1]测试文本         [2]查询位置         [3]商店         [4]音乐控制")
+                self.console.PRINT("[5]显示当前音乐         [99]退出")
                 if self.input == '99':
                     running = False
                 elif self.input:
-                    self.console.PRINT("[99]退出")
-                    self.console.PRINT("[1]测试文本")
-                    self.console.PRINT("[2]查询位置")
-                    self.console.PRINT("[3]商店")
-                    self.console.PRINT("[4]音乐控制")
-                    self.console.PRINT("[5]显示当前音乐")
-                    
                     if self.input == '1':
                         self.text()
                     elif self.input == '2':
@@ -734,9 +786,7 @@ class thethings:
                             self.console.PRINT("音乐系统未初始化", colors=(255, 200, 200))
                         self.console.PRINT("按任意键继续...")
                         self.console.INPUT()
-                    
                     self.console.PRINT("")
-    
     def main(self):
         # 首先初始化地图数据
         self.map()
@@ -744,7 +794,7 @@ class thethings:
         running = True
         while running:
             self.input = self.console.INPUT()
-            
+            self.console.PRINT("[0]start")
             if self.input and self.input.lower() == "quit":
                 running = False
             elif self.input:
@@ -758,34 +808,42 @@ class thethings:
         
         pygame.quit()
         sys.exit()
-
-
 if __name__ == "__main__":
     start = thethings()
-    """     console = SimpleERAConsole()
-    
-    # 测试PRINT功能
-    console.PRINT("\t\t\t\t\t\t\t\t欢迎来到Pera!")
-    console.PRINT("\t\t\t\t\t\t\t\tpower by PYgame")
-    console.PRINT("请输入您的命令:")
-    
-    # 主循环
-    running = True
-    while running:
-        # 获取用户输入
-        user_input = console.INPUT()
-        if user_input =='350234':
-            console.PRINT("真是一对苦命鸳鸯啊")
-        # 处理用户输入
-        if user_input.lower() == "quit":
-            running = False
-        elif user_input:
-            console.PRINT(f"您输入了: {user_input}")
+"""    
+这是为框架测试中用的一个，现在不需要了 
+    def _add_test_content(self):
+        添加测试内容以演示滚动功能
+        colors = [
+            (255, 255, 255),  # 白色
+            (255, 200, 200),  # 淡红色
+            (200, 255, 200),  # 淡绿色
+            (200, 200, 255),  # 淡蓝色
+            (255, 255, 200),  # 淡黄色
+            (255, 200, 255),  # 淡紫色
+        ]
         
-        # 处理退出事件
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                running = False
-    
-    pygame.quit()
-    sys.exit() """
+        # 添加分割线
+        self.loader.add_divider("=", 60, (100, 150, 255))
+        self.loader.add_text("欢迎来到 ERA Console 动态加载器测试", (100, 200, 255))
+        self.loader.add_text("使用鼠标滚轮或方向键滚动查看历史", (150, 150, 255))
+        self.loader.add_divider("-", 50, (100, 100, 150))
+        
+        # 添加大量测试文本
+        # 添加菜单示例
+        self.loader.add_divider("=", 60, (150, 100, 255))
+        self.loader.add_text("菜单示例:", (200, 150, 255))
+        self.loader.add_menu([
+            "[1] 开始游戏",
+            "[2] 加载存档",
+            "[3] 设置选项",
+            "[4] 退出游戏"
+        ])
+        
+        # 添加更多测试内容
+        self.loader.add_divider("=", 60, (255, 150, 100))
+        self.loader.add_text("滚动到底部以查看最新消息", (255, 200, 100))
+        
+        # 自动滚动到底部
+        self.loader.scroll_to_bottom()
+"""
