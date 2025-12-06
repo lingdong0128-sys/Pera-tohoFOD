@@ -798,6 +798,8 @@ class thethings:
             if self.input and self.input.lower() == "quit":
                 running = False
             elif self.input:
+                #在这里添加事件
+                
                 self.start()
                 self.console.PRINT("")
             
