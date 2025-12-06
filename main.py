@@ -252,26 +252,26 @@ class thethings:
                     self.console.PRINT("请输入选择:")
                     
                     # 获取输入
-                    self.input = self.console.INPUT().lower()
+                    thisinput = self.console.INPUT().lower()
                     
-                    if self.input == 'e':
+                    if thisinput == 'e':
                         running = False
-                    elif self.input == 'n':
+                    elif thisinput == 'n':
                         if page < total_pages - 1:
                             page += 1
                         else:
                             self.console.PRINT("已经是最后一页了")
                             self.console.PRINT("按任意键继续...")
                             self.console.INPUT()
-                    elif self.input == 'p':
+                    elif thisinput == 'p':
                         if page > 0:
                             page -= 1
                         else:
                             self.console.PRINT("已经是第一页了")
                             self.console.PRINT("按任意键继续...")
                             self.console.INPUT()
-                    elif self.input.isdigit():
-                        selected = int(self.input)
+                    elif thisinput.isdigit():
+                        selected = int(thisinput)
                         if 1 <= selected <= (end_idx - start_idx):
                             actual_index = start_idx + selected - 1
                             item_id = item_ids[actual_index]
@@ -329,8 +329,7 @@ class thethings:
                     else:
                         self.console.PRINT("无效的命令")
                         self.console.PRINT("按任意键继续...")
-                        self.console.INPUT()
-                        
+                        self.console.INPUT()                 
     def start(self):
         #这里的话是提供给大家开发时的一个思路，你可以通过嵌套输入事件去叠加主事件
         #你在输入0的时候就已经在start这个事件里面了，然后可以把别的东西加在各种各样的主事件里面
