@@ -1,4 +1,4 @@
-# dynamic_loader.py
+# dynamic_loader.py - 更新版
 import pygame
 import os
 import json
@@ -70,7 +70,146 @@ class DynamicLoader:
         # 缓存
         self.text_surface_cache = {}  # 文本surface缓存
         self.image_cache = {}  # 图片缓存
+        self.clickable_regions = []  # 存储所有可点击区域
+        self.clickable_region_counter = 0  # 可点击区域计数器
+        self.active_clickable_regions = []  # 当前显示的可点击区域
+    def add_clickable_text(self, text: str, color: Tuple[int, int, int] = (255, 255, 255), 
+                          click_value: str = None) -> List[ConsoleContent]:
+        """
+        添加可点击文本到历史记录
         
+        Args:
+            text: 文本内容
+            color: 文本颜色
+            click_value: 点击时输入的文本
+            
+        Returns:
+            添加的内容项列表
+        """
+        added_items = self.add_text(text, color)
+        
+        # 将点击信息添加到最后一个内容项的元数据中
+        if click_value is not None and added_items:
+            for item in added_items:
+                if item.data:  # 只对有实际内容的项添加点击
+                    item.metadata['clickable'] = True
+                    item.metadata['click_value'] = click_value
+                    item.metadata['region_id'] = self.clickable_region_counter
+                    
+                    # 记录点击区域
+                    self.clickable_regions.append({
+                        'id': self.clickable_region_counter,
+                        'content_item': item,
+                        'click_value': click_value,
+                        'text': text,
+                        'type': 'text'
+                    })
+                    
+                    self.clickable_region_counter += 1
+        
+        return added_items
+    
+    def add_clickable_image(self, surface: pygame.Surface, identifier: str = None,
+                           click_value: str = None) -> Optional[ConsoleContent]:
+        """
+        添加可点击图片到历史记录
+        
+        Args:
+            surface: 图片Surface
+            identifier: 图片标识符
+            click_value: 点击时输入的文本
+            
+        Returns:
+            添加的内容项或None
+        """
+        item = self.add_image_surface(surface, identifier)
+        
+        if item is not None and click_value is not None:
+            item.metadata['clickable'] = True
+            item.metadata['click_value'] = click_value
+            item.metadata['region_id'] = self.clickable_region_counter
+            
+            # 记录点击区域
+            self.clickable_regions.append({
+                'id': self.clickable_region_counter,
+                'content_item': item,
+                'click_value': click_value,
+                'text': f"[图片] {identifier}",
+                'type': 'image'
+            })
+            
+            self.clickable_region_counter += 1
+        
+        return item
+    
+    def handle_mouse_click(self, mouse_pos: Tuple[int, int]) -> Optional[str]:
+        """
+        处理鼠标点击事件
+        
+        Args:
+            mouse_pos: 鼠标位置 (x, y)
+            
+        Returns:
+            点击的文本值，如果没有点击可点击区域则返回None
+        """
+        # 更新活动点击区域
+        self._update_active_clickable_regions()
+        
+        # 检查是否点击了任何活动区域
+        for region in self.active_clickable_regions:
+            if region['rect'].collidepoint(mouse_pos):
+                return region['click_value']
+        
+        return None
+    
+    def _update_active_clickable_regions(self):
+        """更新当前显示的可点击区域"""
+        self.active_clickable_regions = []
+        current_y = 10
+        
+        # 遍历当前显示的内容项
+        for item in self.current_display:
+            # 如果是可点击项目
+            if 'clickable' in item.metadata and item.metadata['clickable']:
+                # 根据项目类型计算区域
+                region_rect = None
+                
+                if item.type == ContentType.TEXT:
+                    # 文本区域
+                    text_width = self.font.size(item.data)[0] if item.data else 0
+                    region_rect = pygame.Rect(10, current_y, text_width, item.height)
+                
+                elif item.type == ContentType.IMAGE:
+                    # 图片区域
+                    if item.data in self.image_cache:
+                        image = self.image_cache[item.data]
+                        img_x = 10  # 图片从左侧开始
+                        region_rect = pygame.Rect(img_x, current_y, image.get_width(), item.height)
+                
+                if region_rect:
+                    self.active_clickable_regions.append({
+                        'id': item.metadata['region_id'],
+                        'rect': region_rect,
+                        'click_value': item.metadata['click_value'],
+                        'text': item.data if item.type == ContentType.TEXT else f"[图片] {item.data}",
+                        'type': 'text' if item.type == ContentType.TEXT else 'image'
+                    })
+            
+            # 更新Y位置
+            current_y += item.height
+    
+    def clear_clickable_regions(self):
+        """清空所有可点击区域"""
+        self.clickable_regions = []
+        self.active_clickable_regions = []
+        self.clickable_region_counter = 0
+        
+        # 清空历史记录中所有内容的点击元数据
+        for item in self.history:
+            if 'clickable' in item.metadata:
+                item.metadata['clickable'] = False
+                item.metadata.pop('click_value', None)
+                item.metadata.pop('region_id', None)
     def _init_log_file(self):
         """初始化日志文件"""
         try:
@@ -86,8 +225,6 @@ class DynamicLoader:
                 f.write(f"{'='*60}\n\n")
         except Exception as e:
             print(f"初始化日志文件失败: {e}")
-    
-# dynamic_loader.py - 修复 add_text 方法
 
     def add_text(self, text: str, color: Tuple[int, int, int] = (255, 255, 255)) -> List[ConsoleContent]:
         """
@@ -102,8 +239,7 @@ class DynamicLoader:
         """
         added_items = []
         
-        # !!! 关键修复：正确处理空文本 !!!
-        # 如果文本为None或空字符串，添加一个空行
+        # 处理空文本
         if text is None or text == "":
             item = ConsoleContent(ContentType.TEXT, "", color, self.line_height)
             self.history.append(item)
@@ -112,7 +248,7 @@ class DynamicLoader:
             self._update_current_display()
             
             # 自动滚动到底部（如果已经在底部附近）
-            if self.scroll_offset <= 5:  # 如果在底部5行以内
+            if self.scroll_offset <= 5:
                 self.scroll_to_bottom()
             
             return added_items
@@ -165,10 +301,57 @@ class DynamicLoader:
         self._update_current_display()
         
         # 自动滚动到底部（如果已经在底部附近）
-        if self.scroll_offset <= 5:  # 如果在底部5行以内
+        if self.scroll_offset <= 5:
             self.scroll_to_bottom()
         
         return added_items
+    
+    def add_image_surface(self, surface: pygame.Surface, identifier: str = None) -> Optional[ConsoleContent]:
+        """
+        添加图片Surface到历史记录
+        
+        Args:
+            surface: PyGame Surface对象
+            identifier: 可选的标识符
+            
+        Returns:
+            添加的内容项或None
+        """
+        try:
+            if identifier is None:
+                identifier = f"image_{len(self.history)}_{time.time()}"
+            
+            # 缓存图片
+            self.image_cache[identifier] = surface
+            
+            # 计算图片高度
+            img_height = surface.get_height() + 10  # 图片高度 + 边距
+            
+            # 创建内容项
+            item = ConsoleContent(
+                ContentType.IMAGE, 
+                identifier, 
+                height=img_height,
+                metadata={
+                    "surface": surface, 
+                    "width": surface.get_width(), 
+                    "height": surface.get_height()
+                }
+            )
+            
+            self.history.append(item)
+            self._write_to_log(f"[图片: {identifier}]")
+            self._update_current_display()
+            
+            # 自动滚动到底部（如果已经在底部附近）
+            if self.scroll_offset <= 5:
+                self.scroll_to_bottom()
+                
+            return item
+        except Exception as e:
+            error_msg = f"添加图片失败: {e}"
+            self.add_text(error_msg, (255, 100, 100))
+            return None
     
     def add_image(self, image_path: str, max_height: int = 200) -> Optional[ConsoleContent]:
         """
@@ -208,6 +391,11 @@ class DynamicLoader:
                 self.history.append(item)
                 self._write_to_log(f"[图片: {os.path.basename(image_path)}]")
                 self._update_current_display()
+                
+                # 自动滚动到底部（如果已经在底部附近）
+                if self.scroll_offset <= 5:
+                    self.scroll_to_bottom()
+                    
                 return item
             else:
                 error_msg = f"图片文件不存在: {image_path}"
@@ -263,13 +451,21 @@ class DynamicLoader:
     
     def _update_current_display(self):
         """更新当前显示的内容（根据滚动偏移）"""
-        start_idx = max(0, len(self.history) - self.max_visible_items - self.scroll_offset)
-        end_idx = len(self.history) - self.scroll_offset
+        # 计算最大可显示的项目数
+        available_height = self.content_area_height
+        current_height = 0
+        display_items = []
         
-        if start_idx < 0:
-            start_idx = 0
+        # 从后往前遍历历史记录，直到填满显示区域
+        for i in range(len(self.history) - 1 - self.scroll_offset, -1, -1):
+            item = self.history[i]
+            if current_height + item.height <= available_height:
+                display_items.insert(0, item)
+                current_height += item.height
+            else:
+                break
         
-        self.current_display = self.history[start_idx:end_idx]
+        self.current_display = display_items
         
         # 更新滚动条可见性
         total_height = sum(item.height for item in self.history)
@@ -277,9 +473,14 @@ class DynamicLoader:
     
     def scroll_up(self, amount: int = 1):
         """向上滚动"""
-        max_scroll = len(self.history) - self.max_visible_items
-        if max_scroll < 0:
-            max_scroll = 0
+        # 计算最大滚动偏移
+        max_scroll = 0
+        current_height = 0
+        for i in range(len(self.history) - 1, -1, -1):
+            current_height += self.history[i].height
+            if current_height > self.content_area_height:
+                max_scroll = len(self.history) - i
+                break
         
         self.scroll_offset = min(max_scroll, self.scroll_offset + amount)
         self._update_current_display()
@@ -296,11 +497,16 @@ class DynamicLoader:
     
     def scroll_to_top(self):
         """滚动到顶部"""
-        max_scroll = len(self.history) - self.max_visible_items
-        if max_scroll > 0:
-            self.scroll_offset = max_scroll
-        else:
-            self.scroll_offset = 0
+        # 计算最大滚动偏移
+        max_scroll = 0
+        current_height = 0
+        for i in range(len(self.history) - 1, -1, -1):
+            current_height += self.history[i].height
+            if current_height > self.content_area_height:
+                max_scroll = len(self.history) - i
+                break
+        
+        self.scroll_offset = max_scroll
         self._update_current_display()
     
     def clear_history(self):
@@ -308,27 +514,39 @@ class DynamicLoader:
         self.history = []
         self.current_display = []
         self.scroll_offset = 0
+        self.image_cache = {}
         
         # 在日志中记录清空操作
         self._write_to_log("[系统] 历史记录已清空")
     
-    def get_visible_content(self) -> List[ConsoleContent]:
-        """获取当前可见的内容"""
-        return self.current_display
+    def get_history_items(self) -> List[ConsoleContent]:
+        """获取历史记录中的所有项目"""
+        return self.history
     
-    def draw(self, screen: pygame.Surface, y_offset: int = 0):
+    def get_display_area_info(self) -> Dict:
+        """获取显示区域信息"""
+        return {
+            'visible_items': len(self.current_display),
+            'scroll_offset': self.scroll_offset,
+            'total_items': len(self.history),
+            'content_area_height': self.content_area_height,
+            'line_height': self.line_height,
+            'at_bottom': self.scroll_offset == 0,
+            'at_top': False  # 需要在后续计算
+        }
+    
+    def draw(self, screen: pygame.Surface):
         """
         绘制内容到屏幕
         
         Args:
             screen: PyGame屏幕Surface
-            y_offset: Y轴偏移
         """
-        current_y = 10 + y_offset
+        current_y = 10
         
         # 绘制可见内容
         for item in self.current_display:
-            if current_y + item.height > self.content_area_height + y_offset:
+            if current_y + item.height > self.content_area_height + 10:
                 break
                 
             if item.type == ContentType.TEXT:
@@ -341,7 +559,7 @@ class DynamicLoader:
                 # 绘制图片
                 if item.data in self.image_cache:
                     image = self.image_cache[item.data]
-                    img_x = (self.screen_width - item.metadata["width"]) // 2
+                    img_x = 10  # 图片从左侧开始
                     screen.blit(image, (img_x, current_y))
                     current_y += item.height
                     
@@ -361,9 +579,9 @@ class DynamicLoader:
         
         # 绘制滚动条（如果需要）
         if self.scrollbar_visible and len(self.history) > 0:
-            self._draw_scrollbar(screen, y_offset)
+            self._draw_scrollbar(screen)
     
-    def _draw_scrollbar(self, screen: pygame.Surface, y_offset: int):
+    def _draw_scrollbar(self, screen: pygame.Surface):
         """绘制滚动条"""
         total_height = sum(item.height for item in self.history)
         visible_ratio = self.content_area_height / total_height
@@ -373,14 +591,14 @@ class DynamicLoader:
         pygame.draw.rect(
             screen, 
             self.scrollbar_color, 
-            (scrollbar_x, y_offset + 10, self.scrollbar_width, self.content_area_height - 20),
+            (scrollbar_x, 10, self.scrollbar_width, self.content_area_height),
             border_radius=3
         )
         
         # 滚动条滑块
         if visible_ratio < 1.0:
             scrollbar_height = max(20, self.content_area_height * visible_ratio)
-            scrollbar_y = y_offset + 10 + (self.scroll_offset / len(self.history)) * (self.content_area_height - scrollbar_height - 20)
+            scrollbar_y = 10 + (self.scroll_offset / len(self.history)) * (self.content_area_height - scrollbar_height)
             
             pygame.draw.rect(
                 screen,
@@ -435,13 +653,17 @@ class DynamicLoader:
         """获取滚动信息"""
         total_items = len(self.history)
         visible_items = len(self.current_display)
-        max_scroll = max(0, total_items - self.max_visible_items)
+        
+        # 计算是否在顶部
+        at_top = False
+        if total_items > 0:
+            total_height = sum(item.height for item in self.history)
+            at_top = total_height > self.content_area_height and self.scroll_offset >= total_items - visible_items
         
         return {
             "total_items": total_items,
             "visible_items": visible_items,
             "scroll_offset": self.scroll_offset,
-            "max_scroll": max_scroll,
-            "at_top": self.scroll_offset >= max_scroll and max_scroll > 0,
+            "at_top": at_top,
             "at_bottom": self.scroll_offset == 0
         }

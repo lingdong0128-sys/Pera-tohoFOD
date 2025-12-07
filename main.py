@@ -81,21 +81,162 @@ class SimpleERAConsole:
         self.music_box = None
         self.music_list = {}
         self.current_music_name = None
+        self.clickable_regions = []  # 存储所有可点击区域
+        self.clickable_region_counter = 0  # 可点击区域计数器
         
+        # 加载图片数据
+        self.image_data = self._load_image_data()
         # 添加示例文本用于测试滚动
         #self._add_test_content()
-    
+    def PRINTIMG(self, url, clip_pos=None, size=None, click=None):
+        """显示图片到控制台"""
+        try:
+            # 检查图片数据是否存在
+            if url not in self.image_data:
+                self.PRINT(f"图片 {url} 不存在于数据中", (255, 200, 200))
+                return
+            
+            img_info = self.image_data[url]
+            img_path = os.path.join("./img/13/", img_info['filename'])  # 假设图片在images目录
+            
+            # 检查图片文件是否存在
+            if not os.path.exists(img_path):
+                # 尝试其他路径
+                img_path = os.path.join("./", img_info['filename'])
+                if not os.path.exists(img_path):
+                    self.PRINT(f"图片文件不存在: {img_info['filename']}", (255, 200, 200))
+                    return
+            
+            # 加载图片
+            try:
+                image = pygame.image.load(img_path).convert_alpha()
+            except Exception as e:
+                self.PRINT(f"加载图片失败 {img_path}: {e}", (255, 200, 200))
+                return
+            
+            # 获取裁剪区域
+            if clip_pos is None:
+                clip_x, clip_y = img_info['x'], img_info['y']
+            else:
+                clip_x, clip_y = clip_pos
+            
+            clip_width, clip_height = img_info['width'], img_info['height']
+            
+            # 确保裁剪区域在图片范围内
+            img_width, img_height = image.get_size()
+            if clip_x + clip_width > img_width:
+                clip_width = img_width - clip_x
+            if clip_y + clip_height > img_height:
+                clip_height = img_height - clip_y
+            
+            # 裁剪图片
+            if clip_width > 0 and clip_height > 0:
+                clip_rect = pygame.Rect(clip_x, clip_y, clip_width, clip_height)
+                clipped_image = image.subsurface(clip_rect)
+            else:
+                self.PRINT(f"裁剪区域无效: {clip_x}, {clip_y}, {clip_width}, {clip_height}", (255, 200, 200))
+                return
+            
+            # 调整大小
+            if size is not None:
+                target_width, target_height = size
+                clipped_image = pygame.transform.scale(clipped_image, (target_width, target_height))
+            # 将图片添加到动态加载器
+            # 如果设置了click参数，添加可点击区域
+            if click is not None:
+                item = self.loader.add_clickable_image(clipped_image, url, click)
+            else:
+                item = self.loader.add_image_surface(clipped_image, url)
+            
+            # 刷新显示
+            self._draw_display()
+            pygame.display.flip()
+            
+        except Exception as e:
+            self.PRINT(f"显示图片失败 {url}: {e}", (255, 200, 200))
 
+    def _load_image_data(self):
+        """加载13.csv中的图片数据"""
+        image_data = {}
+        csv_path = "./img/13/13.csv"
+        
+        if os.path.exists(csv_path):
+            try:
+                with open(csv_path, 'r', encoding='utf-8-sig') as f:  # 使用utf-8-sig处理BOM
+                    for line in f:
+                        line = line.strip()
+                        if line and not line.startswith(';'):  # 跳过注释行
+                            parts = [p.strip() for p in line.split(',')]
+                            if len(parts) >= 2:
+                                name = parts[0]
+                                filename = parts[1]
+                                if len(parts) >= 6:  # 有完整的裁剪信息
+                                    try:
+                                        x, y, width, height = int(parts[2]), int(parts[3]), int(parts[4]), int(parts[5])
+                                        image_data[name] = {
+                                            'filename': filename,
+                                            'x': x,
+                                            'y': y,
+                                            'width': width,
+                                            'height': height
+                                        }
+                                    except ValueError:
+                                        # 如果解析失败，使用默认值
+                                        image_data[name] = {
+                                            'filename': filename,
+                                            'x': 0,
+                                            'y': 0,
+                                            'width': 270,
+                                            'height': 270
+                                        }
+                                else:
+                                    image_data[name] = {
+                                        'filename': filename,
+                                        'x': 0,
+                                        'y': 0,
+                                        'width': 270,
+                                        'height': 270
+                                    }
+                self.PRINT(f"已加载图片数据: {len(image_data)} 条记录", (200, 200, 255))
+            except Exception as e:
+                self.PRINT(f"加载图片数据失败: {e}", (255, 200, 200))
+        else:
+            self.PRINT(f"图片数据文件不存在: {csv_path}", (255, 200, 200))
+        
+        return image_data
     # main.py - 修复 PRINT 方法
-    def PRINT(self, text=None, colors=(255, 255, 255)):
-        """输出文本到控制台 - 使用动态加载器"""
-        # !!! 关键修复：正确处理空文本 !!!
-        # 确保处理text为None的情况
+    def _handle_mouse_click(self, pos):
+        """处理鼠标点击事件"""
+        # 委托给动态加载器处理
+        click_value = self.loader.handle_mouse_click(pos)
+        
+        if click_value:
+            # 模拟输入
+            self.input_text = click_value
+            
+            # 显示用户输入
+            self.loader.add_text(f"> {click_value}", (255, 255, 200))
+            self.loader.add_text("")  # 空行
+            
+            # 清空点击区域（避免重复点击）
+            self.loader.clear_clickable_regions()
+            
+            # 返回输入值
+            return click_value
+        
+        return None
+    
+    def PRINT(self, text=None, colors=(255, 255, 255), click=None):
+        """输出文本到控制台 - 支持点击功能"""
+        # 处理空文本
         if text is None:
             text = ""
         
-        # 记录到动态加载器
-        self.loader.add_text(text, colors)
+        # 使用加载器的新方法
+        if click is not None:
+            self.loader.add_clickable_text(text, colors, click)
+        else:
+            self.loader.add_text(text, colors)
         
         # 刷新显示
         self._draw_display()
@@ -115,81 +256,87 @@ class SimpleERAConsole:
     # main.py - 修复 INPUT 方法中的空行处理
 
     def INPUT(self):
-        """获取用户输入 - 支持功能键"""
-        self.input_text = ""
-        waiting_for_input = True
-        
-        while waiting_for_input and self.running:
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    self.quit()
-                    return None
-                
-                # 处理动态加载器事件（滚动等）
-                if self.loader.handle_event(event):
-                    self._draw_display()
-                    pygame.display.flip()
-                    continue
-                
-                elif event.type == pygame.KEYUP:
-                    # 功能键处理
-                    if event.key == pygame.K_RETURN:
-                        user_input = self.input_text.strip()
-                        
-                        # !!! 关键修复：显示用户输入，然后添加空行 !!!
-                        if user_input:
-                            # 保存到输入历史
-                            self.input_history.append(user_input)
-                            self.input_history_index = -1
+            """获取用户输入 - 支持功能键和鼠标点击"""
+            self.input_text = ""
+            waiting_for_input = True
+            
+            while waiting_for_input and self.running:
+                for event in pygame.event.get():
+                    if event.type == pygame.QUIT:
+                        self.quit()
+                        return None
+                    
+                    # 先处理动态加载器事件（滚动等）
+                    if self.loader.handle_event(event):
+                        self._draw_display()
+                        pygame.display.flip()
+                        continue
+                    
+                    # 处理鼠标点击（修改为使用动态加载器的方法）
+                    elif event.type == pygame.MOUSEBUTTONDOWN:
+                        if event.button == 1:  # 左键点击
+                            clicked_input = self._handle_mouse_click(event.pos)
+                            if clicked_input:
+                                return clicked_input
+                    
+                    elif event.type == pygame.KEYUP:
+                        # 功能键处理
+                        if event.key == pygame.K_RETURN:
+                            user_input = self.input_text.strip()
                             
-                            # 显示用户输入（不同颜色）
-                            self.loader.add_text(f"> {user_input}", (255, 255, 200))
-                        
-                        # 总是添加一个空行，即使输入为空
-                        self.loader.add_text("")  # 空行
-                        
-                        # 重置输入文本并返回
-                        self.input_text = ""
-                        waiting_for_input = False
-                        return user_input
-                    
-                    elif event.key == pygame.K_BACKSPACE:
-                        self.input_text = self.input_text[:-1]
-                    
-                    elif event.key == pygame.K_UP:
-                        # 向上浏览输入历史
-                        if self.input_history:
-                            if self.input_history_index < len(self.input_history) - 1:
-                                self.input_history_index += 1
-                                self.input_text = self.input_history[-(self.input_history_index + 1)]
-                    
-                    elif event.key == pygame.K_DOWN:
-                        # 向下浏览输入历史
-                        if self.input_history_index > 0:
-                            self.input_history_index -= 1
-                            self.input_text = self.input_history[-(self.input_history_index + 1)]
-                        elif self.input_history_index == 0:
-                            self.input_history_index = -1
+                            if user_input:
+                                # 保存到输入历史
+                                self.input_history.append(user_input)
+                                self.input_history_index = -1
+                                
+                                # 显示用户输入（不同颜色）
+                                self.loader.add_text(f"> {user_input}", (255, 255, 200))
+                            
+                            # 总是添加一个空行，即使输入为空
+                            self.loader.add_text("")  # 空行
+                            
+                            # 重置输入文本并返回
                             self.input_text = ""
-                    
-                    else:
-                        # 只接受可打印字符
-                        if event.unicode.isprintable():
-                            self.input_text += event.unicode
+                            waiting_for_input = False
+                            return user_input
+                        
+                        elif event.key == pygame.K_BACKSPACE:
+                            self.input_text = self.input_text[:-1]
+                        
+                        elif event.key == pygame.K_UP:
+                            # 向上浏览输入历史
+                            if self.input_history:
+                                if self.input_history_index < len(self.input_history) - 1:
+                                    self.input_history_index += 1
+                                    self.input_text = self.input_history[-(self.input_history_index + 1)]
+                        
+                        elif event.key == pygame.K_DOWN:
+                            # 向下浏览输入历史
+                            if self.input_history_index > 0:
+                                self.input_history_index -= 1
+                                self.input_text = self.input_history[-(self.input_history_index + 1)]
+                            elif self.input_history_index == 0:
+                                self.input_history_index = -1
+                                self.input_text = ""
+                        
+                        else:
+                            # 只接受可打印字符
+                            if event.unicode.isprintable():
+                                self.input_text += event.unicode
+                
+                # 绘制界面
+                self._draw_display()
+                
+                # 光标闪烁效果
+                self.cursor_timer += 1
+                if self.cursor_timer > 30:  # 每半秒切换一次
+                    self.cursor_visible = not self.cursor_visible
+                    self.cursor_timer = 0
+                
+                pygame.display.flip()
+                pygame.time.Clock().tick(60)
             
-            # 绘制界面
-            self._draw_display()
-            
-            # 光标闪烁效果
-            self.cursor_timer += 1
-            if self.cursor_timer > 30:  # 每半秒切换一次
-                self.cursor_visible = not self.cursor_visible
-                self.cursor_timer = 0
-            
-            pygame.display.flip()
-            pygame.time.Clock().tick(60)
-        
-        return None
+            return None
     def _init_background_music(self):
         """初始化背景音乐 - 从global_key['musicbox']获取音乐列表"""
         try:
@@ -266,6 +413,7 @@ class SimpleERAConsole:
     def clear_screen(self):
         """清屏"""
         self.loader.clear_history()
+        self.loader.clear_clickable_regions()  # 使用加载器的方法
         self.PRINT("控制台已清空", (200, 255, 200))
     
     def show_scroll_info(self):
@@ -280,7 +428,6 @@ class SimpleERAConsole:
         self.PRINT(f"是否在底部: {'是' if scroll_info['at_bottom'] else '否'}", (200, 200, 200))
         self.PRINT_DIVIDER("=", 40)
     
-    # ... 保持其他方法不变 ...
     
     def init_all(self):
         """初始化所有组件，包括数据和音乐"""
@@ -489,7 +636,8 @@ class thethings:
         running = True
         while running:
             self.input = self.console.INPUT()
-            self.console.PRINT("[0]start")
+            self.console.PRINTIMG("別立ち_服_睡衣_笑顔_13", clip_pos=(270,0))
+            self.console.PRINT("[0]start",click='0')
             if self.input and self.input.lower() == "quit":
                 running = False
             elif self.input:
