@@ -866,13 +866,14 @@ class thethings:
             self.console.PRINTIMG("0_玩家立绘_顔絵_服_通常_0",clip_pos=(0,0))#在输出图片时请在需要输出的图片名前加上角色id_，你可以直接输出在csv中的图片名
             self.console.PRINT(cs("嗯？你来啦？欢迎来到Pera的世界！这里演示的是图片调用，很抱歉直接使用了eratw🐍版里的你小姐的立绘）").set_color((215, 200, 203)))
             self.console.PRINT(cs("[0]start").click("0"),"          ",cs("点击查看凌冬色图").click("no way!!!"),"          ",cs("点击更改字体").click("fontreset"))
+            self.event_manager.trigger_event('fontreset',self)
+            self.event_manager.trigger_event("top",self)
             if self.input and self.input.lower() == "quit":
                 running = False
             elif self.input:
                 #在这里添加事件
                 if self.input=='debug':
                     self.event_manager.trigger_event('showme',self)
-                self.event_manager.trigger_event('fontreset',self)
                 self.event_manager.trigger_event('start',self)
                 self.console.PRINT("")
             # 处理退出事件

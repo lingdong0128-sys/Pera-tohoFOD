@@ -76,7 +76,7 @@ class DynamicLoader:
         self.history: List[ConsoleContent] = []  # 完整的历史记录
         self.max_history_length = 10000  # 最大历史记录数
         self.current_display: List[ConsoleContent] = []  # 当前显示的内容
-        self.max_visible_items = 30  # 最大可见项目数
+        self.max_visible_items = 10000  # 最大可见项目数
         
         # 滚动控制
         self.scroll_offset = 0  # 滚动偏移（项目数）
@@ -631,64 +631,66 @@ class DynamicLoader:
     
     def _update_current_display(self):
         """更新当前显示的内容（根据滚动偏移）"""
-        # 计算最大可显示的项目数
+        # 清空当前显示
+        self.current_display = []
+        
+        # 如果历史记录为空，直接返回
+        if not self.history:
+            return
+        
+        # 计算起始索引
+        # scroll_offset 表示跳过的最新项目数
+        start_index = max(0, len(self.history) - 1 - self.scroll_offset)
+        
+        # 从起始索引开始向前（向历史方向）显示
         available_height = self.content_area_height
         current_height = 0
-        display_items = []
         
-        # 从后往前遍历历史记录，直到填满显示区域
-        for i in range(len(self.history) - 1 - self.scroll_offset, -1, -1):
+        for i in range(start_index, -1, -1):
             item = self.history[i]
             if current_height + item.height <= available_height:
-                display_items.insert(0, item)
+                self.current_display.insert(0, item)  # 保持顺序
                 current_height += item.height
             else:
                 break
         
-        self.current_display = display_items
+        # 如果显示区域还有空间，尝试向后（向最新方向）显示
+        # 这样可以确保显示区域总是填满
+        if current_height < available_height and start_index < len(self.history) - 1:
+            for i in range(start_index + 1, len(self.history)):
+                item = self.history[i]
+                if current_height + item.height <= available_height:
+                    self.current_display.append(item)  # 添加到末尾
+                    current_height += item.height
+                else:
+                    break
         
         # 更新滚动条可见性
         total_height = sum(item.height for item in self.history)
         self.scrollbar_visible = total_height > self.content_area_height
     
     def scroll_up(self, amount: int = 1):
-        """向上滚动"""
-        # 计算最大滚动偏移
-        max_scroll = 0
-        current_height = 0
-        for i in range(len(self.history) - 1, -1, -1):
-            current_height += self.history[i].height
-            if current_height > self.content_area_height:
-                max_scroll = len(self.history) - i
-                break
-        
+        """向上滚动（查看更旧的内容）"""
+        # 最大滚动偏移是历史记录总数减1
+        max_scroll = max(0, len(self.history) - 1)
         self.scroll_offset = min(max_scroll, self.scroll_offset + amount)
         self._update_current_display()
     
     def scroll_down(self, amount: int = 1):
-        """向下滚动"""
+        """向下滚动（查看更新的内容）"""
         self.scroll_offset = max(0, self.scroll_offset - amount)
         self._update_current_display()
     
     def scroll_to_bottom(self):
-        """滚动到底部"""
+        """滚动到底部 - 显示最新的内容"""
         self.scroll_offset = 0
         self._update_current_display()
-    
-    def scroll_to_top(self):
-        """滚动到顶部"""
-        # 计算最大滚动偏移
-        max_scroll = 0
-        current_height = 0
-        for i in range(len(self.history) - 1, -1, -1):
-            current_height += self.history[i].height
-            if current_height > self.content_area_height:
-                max_scroll = len(self.history) - i
-                break
         
-        self.scroll_offset = max_scroll
+    def scroll_to_top(self):
+        """滚动到顶部 - 显示最旧的内容"""
+        # 设置滚动偏移为最大值
+        self.scroll_offset = max(0, len(self.history) - 1)
         self._update_current_display()
-    
     def clear_history(self):
         """清空历史记录"""
         self.history = []
