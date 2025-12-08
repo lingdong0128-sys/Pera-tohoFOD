@@ -99,6 +99,8 @@ class DynamicLoader:
         self.clickable_regions = []  # 存储所有可点击区域
         self.clickable_region_counter = 0  # 可点击区域计数器
         self.active_clickable_regions = []  # 当前显示的可点击区域
+    def set_font(self, font):
+        self.font = font
     def add_inline_fragments(self, fragments: List[InlineFragment]) -> ConsoleContent:
         """
         添加行内片段到历史记录（所有片段在同一行）

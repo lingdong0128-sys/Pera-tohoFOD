@@ -94,6 +94,38 @@ class SimpleERAConsole:
         self.chara_images = {}  # 角色立绘字典，键为角色ID，值为该角色下的图片列表
         # 添加示例文本用于测试滚动
         #self._add_test_content()
+    def set_font(self, font_path, font_size=24):
+        """
+        更改字体文件，只影响后续的输出
+        
+        Args:
+            font_path: 字体文件路径
+            font_size: 字体大小，默认为24
+        """
+        try:
+            # 加载新字体
+            new_font = pygame.font.Font(font_path, font_size)
+            
+            # 更新控制台字体
+            self.font = new_font
+            
+            # 更新动态加载器中的字体，确保后续输出使用新字体
+            self.loader.set_font(new_font)
+            
+            # 更新行高（如果需要）
+            self.line_height = font_size + 6  # 可根据需要调整
+            
+            self.PRINT(f"字体已更改为: {os.path.basename(font_path)} (大小: {font_size})", (200, 255, 200))
+            
+            # 刷新显示
+            self._draw_display()
+            pygame.display.flip()
+            
+        except FileNotFoundError:
+            self.PRINT(f"字体文件未找到: {font_path}", (255, 200, 200))
+        except Exception as e:
+            self.PRINT(f"更改字体失败: {e}", (255, 200, 200))
+
     def PRINTIMG(self, url, clip_pos=None, size=None, click=None, chara_id=None, draw_type=None):
         """
         显示图片到控制台 - 支持新的目录结构
@@ -833,13 +865,14 @@ class thethings:
             self.console.PRINT(gradient_text.click("gradient"))
             self.console.PRINTIMG("0_玩家立绘_顔絵_服_通常_0",clip_pos=(0,0))#在输出图片时请在需要输出的图片名前加上角色id_，你可以直接输出在csv中的图片名
             self.console.PRINT(cs("嗯？你来啦？欢迎来到Pera的世界！这里演示的是图片调用，很抱歉直接使用了eratw🐍版里的你小姐的立绘）").set_color((215, 200, 203)))
-            self.console.PRINT(cs("[0]start").click("0"),"          ",cs("点击查看凌冬色图").click("no way!!!"))
+            self.console.PRINT(cs("[0]start").click("0"),"          ",cs("点击查看凌冬色图").click("no way!!!"),"          ",cs("点击更改字体").click("fontreset"))
             if self.input and self.input.lower() == "quit":
                 running = False
             elif self.input:
                 #在这里添加事件
                 if self.input=='debug':
                     self.event_manager.trigger_event('showme',self)
+                self.event_manager.trigger_event('fontreset',self)
                 self.event_manager.trigger_event('start',self)
                 self.console.PRINT("")
             # 处理退出事件
