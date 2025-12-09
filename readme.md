@@ -49,6 +49,7 @@ def event_helloworld(things):
     name = things.console.init.charaters_key["0"].get("名前")  
     things.console.PRINT("你好Pera！", f"{name}")
 ```
+
 * 该事件被调用时，终端会打印出：你好！Pera 你 
 
 ### **2\. 数据结构与调用**
@@ -265,6 +266,14 @@ Pera 提供了普通输出和高级交互输出（cs/ColorString）。
        cs("helloworld").set_color((0,0,255)).click("你好！Pera")  
    )
    ```
+
+## **关于INPUT**
+
+* **INPUT的接口调用是一个非常重要的内容，您必须要了解这些才能开始Pera的框架使用**
+
+* **什么是INPUT调用？怎么调用？**
+  * **INPUT调用**一般指的是input=thethins.console.INPUT()，也就是为一个变量赋值为用户输入，这会执行一次用户输入调用，并将其赋值给input，**注意！！！不要去调用main中的input，因为他在你进入事件的那一刻就已经和你这个事件没有关系了！**
+  * **INPUT直接调用**一般指的是不为INPUT赋值而是直接调用INPUT接口，这时将会停留在当前界面并等待用户输入
 
 ## **开发指南**
 
