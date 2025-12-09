@@ -612,11 +612,7 @@ class DynamicLoader:
         self.clickable_region_counter = 0
         
         # 清空历史记录中所有内容的点击元数据
-        for item in self.history:
-            if 'clickable' in item.metadata:
-                item.metadata['clickable'] = False
-                item.metadata.pop('click_value', None)
-                item.metadata.pop('region_id', None)
+
     def _init_log_file(self):
         """初始化日志文件"""
         try:

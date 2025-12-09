@@ -500,15 +500,15 @@ class SimpleERAConsole:
                     elif event.type == pygame.KEYUP:
                         # 功能键处理
                         if event.key == pygame.K_RETURN:
-                            user_input = self.input_text.strip()
+                            user_input = self.input_text
                             
-                            if user_input:
+                            if user_input is not None:
                                 # 保存到输入历史
                                 self.input_history.append(user_input)
                                 self.input_history_index = -1
                                 
                                 # 显示用户输入（不同颜色）
-                                self.loader.add_text(f"> {user_input}", (255, 255, 200))
+                            self.loader.add_text(f"> {user_input}", (255, 255, 200))
                             
                             # 总是添加一个空行，即使输入为空
                             self.loader.add_text("")  # 空行
@@ -857,6 +857,7 @@ class thethings:
     def main(self):
         # 首先初始化地图数据
         self.event_manager.trigger_event('map',self)
+        self.console.PRINT("加载完成，回车以继续...")
         running = True
         while running:
             self.input = self.console.INPUT()
@@ -864,16 +865,15 @@ class thethings:
             self.console.PRINT(gradient_text.click("gradient"))
             self.console.PRINTIMG("0_玩家立绘_顔絵_服_通常_0",clip_pos=(0,0),size=(180,180))#在输出图片时请在需要输出的图片名前加上角色id_，你可以直接输出在csv中的图片名
             self.console.PRINT(cs("嗯？你来啦？欢迎来到Pera的世界！这里演示的是图片调用，很抱歉直接使用了eratw🐍版里的你小姐的立绘）").set_color((215, 200, 203)))
-            self.console.PRINT(cs("[0]start").click("0"),"          ",cs("点击查看凌冬色图").click("no way!!!"),"          ",cs("点击更改字体").click("fontreset"))
-            self.event_manager.trigger_event('fontreset',self)
-            self.event_manager.trigger_event("top",self)
+            self.console.PRINT(cs("[0]start").click("0"),"          ",cs("点击查看凌冬色图").click("no way!!!"),"          ",cs("点击更改字体").click("fontreset"),"        ",cs("[666]和你小姐对话").click("666"))
             if self.input and self.input.lower() == "quit":
                 running = False
             elif self.input:
                 #在这里添加事件
+                self.event_manager.trigger_event('start',self)
                 if self.input=='debug':
                     self.event_manager.trigger_event('showme',self)
-                self.event_manager.trigger_event('start',self)
+                self.event_manager.trigger_event("isay",self)
                 self.console.PRINT("")
             # 处理退出事件
             for event in pygame.event.get():
