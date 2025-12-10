@@ -22,7 +22,7 @@ Pera 是一个基于 **Python** 和 **Pygame** 构建的前端框架，旨在让
 ### 环境需求
 
 * 使用pip安装requirements中的库
-* 使用 **Python 3.x**。  
+* 使用 **Python 3.13.x**。  
 
 ### 启动方式
 
