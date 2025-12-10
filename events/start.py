@@ -11,7 +11,7 @@ def event_start(this):
         input = this.console.INPUT()
         this.console.PRINT(this.cs("[1]测试文本").click("1"),"         ",this.cs("[2]查询位置").click("2"),"         ",this.cs("[3]商店").click("3"),"         ",this.cs("[4]音乐控制").click("4"))
         this.console.PRINT(this.cs("[5]显示当前音乐").click("5"),"     ",this.cs("[99]退出").click("99"),"            ",this.cs("[10]查看当前加载事件").click("10"),"           ",this.cs("[8]helloworld！").click("8"))
-        this.console.PRINT(this.cs("[100]四处张望").click("100"))
+        this.console.PRINT(this.cs("[100]四处张望").click("100"),"         ",this.cs("[200]badapple？").click("200"))
         if input == '99':
             running = False
         elif input:
@@ -44,6 +44,8 @@ def event_start(this):
                 this.event_manager.trigger_event('helloworld',this)
             elif input=='100':
                 this.event_manager.trigger_event('findthem',this)
+            elif input=='200':
+                this.event_manager.trigger_event('bad_apple',this)
             this.console.PRINT("")
 event_start.event_id = "start"
 event_start.event_name = "开始"
