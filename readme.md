@@ -88,6 +88,13 @@ python main.py
          PRINTIMG("顔絵_服_通常_0", chara_id="0", draw_type="玩家立绘")
          ```
 
+    * **列表调用**:
+
+        ```Python
+            img_list = ["別顔_服_笑顔_0","別顔_汗_0",]
+            self.console.PRINTIMG("",img_list=img_list,chara_id='0',draw_type='玩家立绘')
+        ```
+
 * **event_manager接口**
   * **理解事件管理器**事件管理器就像一个盒子，他首先会把你写的event放进这个盒子，然后你通过这个盒子去拿你写的event，而在盒子中你的事件命名是按着你的文件名来的
   * **使用**
