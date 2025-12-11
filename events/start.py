@@ -9,14 +9,17 @@ def event_start(this):
     running = True
     while running:
         input = this.console.INPUT()
+        this.event_manager.trigger_event('对象选择',this)
         this.console.PRINT(this.cs("[1]测试文本").click("1"),"         ",this.cs("[2]查询位置").click("2"),"         ",this.cs("[3]商店").click("3"),"         ",this.cs("[4]音乐控制").click("4"))
         this.console.PRINT(this.cs("[5]显示当前音乐").click("5"),"     ",this.cs("[99]退出").click("99"),"            ",this.cs("[10]查看当前加载事件").click("10"),"           ",this.cs("[8]helloworld！").click("8"))
-        this.console.PRINT(this.cs("[100]四处张望").click("100"),"         ",this.cs("[200]badapple？").click("200"))
+        this.console.PRINT(this.cs("[100]四处张望").click("100"),"         ",this.cs("[200]badapple？").click("200"),"         ",this.cs("[22]聊天").click("22"))
         if input == '99':
             running = False
         elif input:
             if input == '1':
                 this.event_manager.trigger_event('text',this)
+            elif input == '22':
+                this.event_manager.trigger_event('聊天',this)
             elif input == '2':
                 this.event_manager.trigger_event('getpwd',this)
             elif input == '3':
