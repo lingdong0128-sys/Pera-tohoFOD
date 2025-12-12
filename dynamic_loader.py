@@ -166,49 +166,159 @@ class DynamicLoader:
     # 在DynamicLoader类中添加add_inline_fragments方法
     def add_inline_fragments(self, fragments):
         """
-        添加行内片段到历史记录
+        添加行内片段到历史记录 - 支持自动换行
         
         Args:
             fragments: InlineFragment列表
         """
         if not fragments:
-            return
+            return []
+
+        # 计算最大允许宽度 (屏幕宽 - 边距 - 滚动条预留)
+        max_width = self.screen_width - 40 - 15 
         
-        # 创建ConsoleContent对象
-        item = ConsoleContent(
-            ContentType.TEXT,
-            "",  # 主文本为空，使用fragments
-            fragments=fragments,
-            height=self.line_height
-        )
+        added_items = []
+        current_line_fragments = []
+        current_line_width = 0
         
-        # 处理可点击区域
-        for i, fragment in enumerate(fragments):
-            if fragment.click_value:
-                item.metadata['clickable'] = True
-                region_id = self.clickable_region_counter
+        # 辅助函数：提交当前行
+        def commit_line():
+            nonlocal current_line_fragments, current_line_width
+            if not current_line_fragments:
+                return
+
+            # 创建内容项
+            item = ConsoleContent(
+                ContentType.TEXT,
+                "", 
+                fragments=current_line_fragments,
+                height=self.line_height
+            )
+            
+            # 注册点击区域
+            for i, fragment in enumerate(current_line_fragments):
+                if fragment.click_value:
+                    item.metadata['clickable'] = True
+                    region_id = self.clickable_region_counter
+                    
+                    self.clickable_regions.append({
+                        'id': region_id,
+                        'content_item': item,
+                        'fragment_index': i, # 标记是第几个片段
+                        'click_value': fragment.click_value,
+                        'text': fragment.text,
+                        'type': 'inline_fragment'
+                    })
+                    self.clickable_region_counter += 1
+            
+            self.history.append(item)
+            added_items.append(item)
+            
+            # 重置当前行
+            current_line_fragments = []
+            current_line_width = 0
+
+        # --- 遍历所有片段 ---
+        for frag in fragments:
+            # 1. 计算片段总宽
+            frag_width = frag.calculate_width(self.font)
+            
+            # 2. 如果是图片 (不可分割)
+            if frag.is_image_mark:
+                # 如果当前行放不下这张图，且当前行不是空的，先换行
+                if current_line_width + frag_width > max_width and current_line_fragments:
+                    commit_line()
                 
-                self.clickable_regions.append({
-                    'id': region_id,
-                    'content_item': item,
-                    'fragment_index': i,
-                    'click_value': fragment.click_value,
-                    'text': fragment.text,
-                    'type': 'inline_fragment'
-                })
+                # 加入当前行
+                current_line_fragments.append(frag)
+                current_line_width += frag_width
                 
-                self.clickable_region_counter += 1
+                # 如果这张图本身就比屏幕宽（极少见），那也没办法，只能让它超出去或者强制再换行
+                # 这里选择让它独占一行后，如果还超宽就不管了，因为图片很难切分
+                if current_line_width > max_width:
+                    commit_line()
+            
+            # 3. 如果是文本 (可以分割)
+            else:
+                # 如果整段文本能放下，直接加
+                if current_line_width + frag_width <= max_width:
+                    current_line_fragments.append(frag)
+                    current_line_width += frag_width
+                else:
+                    # 放不下，需要切分文本
+                    remaining_text = frag.text
+                    
+                    while remaining_text:
+                        # 尝试找出能在当前行放下的最大子字符串
+                        # 这是一个字符级循环，确保中文也能正确换行
+                        fit_text = ""
+                        fit_width = 0
+                        
+                        # 预计算剩余空间
+                        space_left = max_width - current_line_width
+                        
+                        # 快速检查：如果一个字都放不下，且当前行有东西，先换行
+                        if space_left <= 0 and current_line_fragments:
+                            commit_line()
+                            space_left = max_width
+                        
+                        # 逐字扫描 (优化：可以先估算，但逐字最准确)
+                        # 为了性能，这里可以优化，但对于VN来说逐字扫描通常够快
+                        split_index = 0
+                        for char in remaining_text:
+                            char_w = self.font.size(char)[0]
+                            if fit_width + char_w <= space_left:
+                                fit_width += char_w
+                                split_index += 1
+                            else:
+                                break
+                        
+                        # 如果是空的（连一个字都放不下），强制换行
+                        if split_index == 0:
+                            if current_line_fragments:
+                                commit_line()
+                                continue # 换行后重试
+                            else:
+                                # 极端情况：这一行是空的，但第一个字就比屏幕宽（不太可能发生）
+                                # 强制放入一个字防止死循环
+                                split_index = 1
+                                fit_width = self.font.size(remaining_text[0])[0]
+
+                        # 切割文本
+                        fit_text = remaining_text[:split_index]
+                        remaining_text = remaining_text[split_index:]
+                        
+                        # 创建新片段（继承颜色和点击属性）
+                        new_frag = InlineFragment(
+                            fit_text, 
+                            frag.color, 
+                            frag.click_value,
+                            is_image_mark=False
+                        )
+                        # 只有当它是图片时才需要传 info，文本不需要，避免 calculate_width 报错
+                        new_frag.width = fit_width 
+                        
+                        current_line_fragments.append(new_frag)
+                        current_line_width += fit_width
+                        
+                        # 如果还有剩余文本，说明这行满了，提交换行
+                        if remaining_text:
+                            commit_line()
+
+        # 提交最后一行
+        commit_line()
         
-        # 添加到历史记录
-        self.history.append(item)
-        self._write_to_log(f"[TEXT] {''.join(f.text for f in fragments)}")
+        # 记录日志
+        full_text = ''.join(f.text for f in fragments)
+        self._write_to_log(f"[TEXT] {full_text}")
+        
         self._update_current_display()
         
-        # 自动滚动到底部
+        # 自动滚动
         if self.scroll_offset <= 5:
             self.scroll_to_bottom()
         
-        return item
+        return added_items
     # 在DynamicLoader类中添加_parse_params方法
     def _parse_params(self, param_str):
         """解析参数字符串为字典"""
@@ -962,16 +1072,9 @@ class DynamicLoader:
                     max_height_in_line = item.height - 10  # 减去边距
                     
                     for fragment in item.fragments:
-                        # 计算片段宽度
-                        fragment.calculate_width(self.font)
-                        
-                        # 检查是否需要换行
-                        available_width = self.screen_width - current_x - 20
-                        if fragment.width > available_width and current_x > 10:
-                            current_x = 10
-                            current_y += item.height
-                            # 重新计算基线
-                            max_height_in_line = item.height - 10
+                       # 计算宽度 (现在不需要在 draw 里计算了，前面已经算过了，但为了保险可以保留)
+                        if fragment.width == 0:
+                             fragment.calculate_width(self.font)
                         
                         # 如果是图片标记
                         if fragment.is_image_mark:
@@ -981,23 +1084,18 @@ class DynamicLoader:
                                 # 计算图片位置（垂直居中于行高）
                                 img_y = current_y + (max_height_in_line - image.get_height()) // 2
                                 screen.blit(image, (current_x, img_y))
-                                
-                                # 如果有点击功能，添加点击区域
+                                    
+                                    # 加入点击区域 (Active)
                                 if fragment.click_value:
-                                    # 创建点击区域
-                                    region_id = self.clickable_region_counter
-                                    self.clickable_region_counter += 1
-                                    
-                                    region_rect = pygame.Rect(current_x, img_y, 
-                                                            image.get_width(), 
-                                                            image.get_height())
-                                    
+                                    region_rect = pygame.Rect(current_x, img_y, image.get_width(), image.get_height())
+                                        # ... 添加到 active_clickable_regions ...
+                                        # (请确保这里复制了之前修复点击的代码)
                                     self.active_clickable_regions.append({
-                                        'id': region_id,
-                                        'rect': region_rect,
-                                        'click_value': fragment.click_value,
-                                        'type': 'image'
-                                    })
+                                            # ... 你的 active 列表添加逻辑 ...
+                                            'id': -1, # id 此时不重要，重要的是 rect 和 value
+                                            'rect': region_rect,
+                                            'click_value': fragment.click_value
+                                        })
                             else:
                                 # 图片加载失败，绘制占位符
                                 placeholder_rect = pygame.Rect(current_x, current_y, 

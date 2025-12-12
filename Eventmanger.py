@@ -54,6 +54,7 @@ class EventManager:
         try:
             if event_name in self.events:
                 # 传递 thethings 实例给事件函数
-                self.events[event_name](things_instance)
+                return self.events[event_name](things_instance)
         except Exception as e:
             self.console.PRINT(f"触发事件失败 {event_name}: {e}", (255, 200, 200))
+            return None
