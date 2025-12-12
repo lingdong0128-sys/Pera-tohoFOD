@@ -34,16 +34,18 @@ class thethings:
             self.console.PRINT(gradient_text.click("gradient"))
             img_list = [
                 {"img": "別顔_服_笑顔_0", "draw_type": "玩家立绘",'chara_id':'0'},
-                {"img": "別顔_汗_0", "draw_type": "玩家立绘",'chara_id':'0'},
+                {"img": "別顔_汗_0", "draw_type": "玩家立绘",'chara_id':'0',"offset":(0,-10)},
                 {'img': "1_EN绘_別顔_服_通常_1","offset":(180,0)}
             ]
             self.console.PRINTIMG("",img_list=img_list)#在输出图片时请在需要输出的图片名前加上角色id_，你可以直接输出在csv中的图片名
             self.console.PRINT(cs("嗯？你来啦？欢迎来到Pera的世界！这里演示的是图片调用，很抱歉直接使用了eratw🐍版里的你小姐的立绘）").set_color((215, 200, 203)))
-            self.console.PRINT(cs("[0]start").click("0"),"          ",cs("点击查看凌冬色图").click("no way!!!"),"          ",cs("点击更改字体").click("fontreset"),"        ",cs("[666]和你小姐对话").click("666"))
+            self.console.PRINT(cs("[0]start").click("0"),"          ",cs("关于作者").click("show_ascii_girl"),"          ",cs("点击更改字体").click("fontreset"),"        ",cs("[666]和你小姐对话").click("666"))
             if self.input and self.input.lower() == "quit":
                 running = False
             elif self.input:
                 #在这里添加事件
+                if self.input=="show_ascii_girl":
+                    self.event_manager.trigger_event("show_ascii_girl",self)
                 if self.input=='0':
                     self.event_manager.trigger_event('start',self)
                 if self.input=='debug':
