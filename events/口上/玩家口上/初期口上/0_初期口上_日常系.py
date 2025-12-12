@@ -1,4 +1,4 @@
-def event_isay(this):
+def event_0_初期口上_日常系(this):
     this.console.PRINTIMG("0_玩家立绘_別顔_服_笑顔_0", clip_pos=(0,0), size=(180,180))
     this.console.PRINT("嗯？不选择进入游戏反而选择和我搭话吗？")
     this.console.INPUT()
@@ -39,6 +39,6 @@ def event_isay(this):
                 this.console.INPUT()
         else:
             continue
-event_isay.event_id = "isay"
-event_isay.event_name = "和你小姐说话"
-event_isay.event_trigger = "666"
+event_0_初期口上_日常系.event_id = "isay"
+event_0_初期口上_日常系.event_name = "和你小姐说话"
+event_0_初期口上_日常系.event_trigger = "666"
