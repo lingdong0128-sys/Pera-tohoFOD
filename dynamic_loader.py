@@ -5,6 +5,7 @@ import json
 import time
 from typing import List, Tuple, Dict, Optional
 from enum import Enum
+from collections import OrderedDict
 # 在dynamic_loader.py中修改InlineFragment类
 class InlineFragment:
     """行内片段 - 增强版，支持图片标记"""
@@ -156,13 +157,46 @@ class DynamicLoader:
         # 日志文件
         self.log_file = log_file
         self._init_log_file()
-        
         # 缓存
         self.text_surface_cache = {}  # 文本surface缓存
-        self.image_cache = {}  # 图片缓存
+        self.image_cache = OrderedDict()  # 图片缓存
+        self.CACHE_LIMIT = 50  # 限制内存中最多只保留 50 张最近使用的图片
         self.clickable_regions = []  # 存储所有可点击区域
         self.clickable_region_counter = 0  # 可点击区域计数器
         self.active_clickable_regions = []  # 当前显示的可点击区域
+    def _get_image_from_cache(self, img_path):
+            """
+            LRU 缓存获取图片：
+            1. 如果在缓存里，移动到末尾（标记为最近使用），直接返回。
+            2. 如果不在缓存里，从硬盘加载。
+            3. 如果缓存满了，删除最久未使用的图片（第一个）。
+            """
+            if not img_path or not os.path.exists(img_path):
+                return None
+
+            # 情况 1: 图片已在缓存中
+            if img_path in self.image_cache:
+                # 将其移动到字典末尾，表示"最近刚刚用过"
+                self.image_cache.move_to_end(img_path)
+                return self.image_cache[img_path]
+
+            # 情况 2: 图片不在缓存中，需要加载
+            try:
+                image = pygame.image.load(img_path).convert_alpha()
+                
+                # 检查缓存是否已满
+                if len(self.image_cache) >= self.CACHE_LIMIT:
+                    # [核心逻辑] 弹出第一个元素（即最久没被用过的图片），释放内存
+                    removed_path, _ = self.image_cache.popitem(last=False)
+                    # print(f"释放图片内存: {removed_path}") # 调试用
+                
+                # 加入缓存
+                self.image_cache[img_path] = image
+                return image
+                
+            except Exception as e:
+                print(f"加载图片失败: {img_path} - {e}")
+                return None
     # 在DynamicLoader类中添加add_inline_fragments方法
     def add_inline_fragments(self, fragments):
         """
@@ -940,118 +974,87 @@ class DynamicLoader:
     
     # dynamic_loader.py - 添加 _render_and_draw_image_stack 方法
     def _render_and_draw_image_stack(self, screen, item, x, y):
-        """渲染图片叠加 - 新格式"""
-        metadata = item.metadata
-        
-        # 检查缓存
-        if metadata.get('cached_surface') and not metadata.get('needs_rendering'):
-            surface = metadata['cached_surface']
-            screen.blit(surface, (x, y))
-            return surface
-        
-        # 获取参数
-        img_elements = metadata.get('img_elements', [])
-        print(f"正在尝试叠加图片，共 {len(img_elements)} 张: {[e['name'] for e in img_elements]}")
-        template_width = metadata.get('template_width', self.screen_width - 20)
-        template_height = metadata.get('template_height', 300)
-        
-        if not img_elements:
-            # 绘制错误指示
-            self._draw_image_error(screen, x, y, template_height)
-            return None
-        
-        try:
-            # 创建透明画布
-            final_surface = pygame.Surface((template_width, template_height), pygame.SRCALPHA)
+            """渲染图片叠加 - 最终优化版 (LRU缓存+实时合成+修复裁剪+修复点击)"""
+            metadata = item.metadata
             
-            # 依次处理每个图片元素
-            for element in img_elements:
-                img_name = element['name']
-                info = element['info']
+            # 获取参数
+            template_width = metadata.get('template_width', self.screen_width - 20)
+            template_height = metadata.get('template_height', 300)
+            img_elements = metadata.get('img_elements', [])
+            
+            if not img_elements:
+                self._draw_image_error(screen, x, y, template_height)
+                return None
+            
+            try:
+                # 创建透明画布 (每帧实时创建，开销很小，Python GC 会自动回收)
+                final_surface = pygame.Surface((template_width, template_height), pygame.SRCALPHA)
                 
-                # 获取图片路径
-                img_path = info.get('path')
-                if not img_path or not os.path.exists(img_path):
-                    print(f"图片文件不存在: {img_path}")
-                    continue
-                
-                try:
-                    # 加载图片
-                    if img_path in self.image_cache:
-                        image = self.image_cache[img_path]
-                    else:
-                        if os.path.exists(img_path):
-                            image = pygame.image.load(img_path).convert_alpha()
-                            self.image_cache[img_path] = image # 存入缓存
-                        else:
-                            continue # 文件不存在处理
+                for element in img_elements:
+                    info = element['info']
+                    img_path = info.get('path')
                     
-                    # 1. 获取 CSV/注册表中定义的裁剪参数
-                    # 这些值来自 ERAconsole.py 的 _get_image_info_dict
+                    # 1. [LRU] 从缓存获取原始图片 (不要修改这个对象!)
+                    image = self._get_image_from_cache(img_path)
+                    if not image:
+                        continue
+                    
+                    # 2. [裁剪] 获取参数并判断是否需要裁剪
                     csv_x = info.get('clip_x', 0)
                     csv_y = info.get('clip_y', 0)
                     csv_w = info.get('original_width', image.get_width())
                     csv_h = info.get('original_height', image.get_height())
-                    
                     img_w, img_h = image.get_size()
 
-                    # 2. 判断是否需要裁剪
-                    # 只要定义的区域跟原图尺寸不一样，或者起始点不在(0,0)，就必须裁剪
-                    # 哪怕 csv_x 是 0，只要 csv_w < img_w，也得裁！
+                    # 判断逻辑：只要定义的区域跟原图尺寸不一样，或者起始点不在(0,0)，就裁剪
                     needs_crop = (csv_x > 0 or csv_y > 0 or csv_w < img_w or csv_h < img_h)
                     
                     if needs_crop:
-                        # 确保裁剪区域不越界
                         safe_w = min(csv_w, img_w - csv_x)
                         safe_h = min(csv_h, img_h - csv_y)
                         
                         if safe_w > 0 and safe_h > 0:
-                            clip_rect = pygame.Rect(csv_x, csv_y, safe_w, safe_h)
-                            image = image.subsurface(clip_rect)
-                        else:
-                            print(f"无效的裁剪区域: {img_name} ({csv_x},{csv_y},{csv_w},{csv_h})")
+                            # subsurface 是共享内存引用，速度极快
+                            image = image.subsurface(pygame.Rect(csv_x, csv_y, safe_w, safe_h))
                     
-                    # 应用缩放
+                    # 3. [缩放]
                     target_width = info.get('target_width', image.get_width())
                     target_height = info.get('target_height', image.get_height())
                     
                     if target_width != image.get_width() or target_height != image.get_height():
-                        try:
-                            image = pygame.transform.scale(image, (target_width, target_height))
-                        except Exception as e:
-                            print(f"缩放失败: {img_name}, size=({target_width},{target_height}): {e}")
-                            continue
+                        image = pygame.transform.scale(image, (target_width, target_height))
                     
-                    # 计算绘制位置
+                    # 4. [偏移并绘制]
                     offset_x = info.get('offset_x', 0)
                     offset_y = info.get('offset_y', 0)
-                    
-                    # 将图片绘制到最终画布上
                     final_surface.blit(image, (offset_x, offset_y))
+                
+                # 绘制最终结果到屏幕
+                screen.blit(final_surface, (x, y))
+                
+                # 5. [点击区域] 更新并加入活跃列表
+                if metadata.get('clickable'):
+                    rect = pygame.Rect(x, y, template_width, template_height)
                     
-                except Exception as e:
-                    print(f"处理图片失败 {img_name}: {e}")
-                    continue
-            
-            # 缓存结果
-            metadata['cached_surface'] = final_surface
-            metadata['needs_rendering'] = False
-            
-            # 绘制到屏幕
-            screen.blit(final_surface, (x, y))
-            
-            # 更新点击区域（如果有全局点击）
-            if metadata.get('clickable'):
-                for region in self.clickable_regions:
-                    if region.get('content_item') == item:
-                        region['rect'] = pygame.Rect(x, y, template_width, template_height)
-            
-            return final_surface
-            
-        except Exception as e:
-            print(f"渲染图片叠加失败: {e}")
-            self._draw_image_error(screen, x, y, template_height)
-            return None
+                    for region in self.clickable_regions:
+                        if region.get('content_item') == item:
+                            # 更新永久记录
+                            region['rect'] = rect
+                            # 加入当前帧活跃列表
+                            self.active_clickable_regions.append({
+                                'id': region['id'],
+                                'rect': rect,
+                                'click_value': region['click_value'],
+                                'text': region.get('text', ''),
+                                'type': region.get('type', 'image_stack')
+                            })
+                
+                return final_surface
+                
+            except Exception as e:
+                print(f"渲染图片叠加失败: {e}")
+                self._draw_image_error(screen, x, y, template_height)
+                return None
     # dynamic_loader.py - 修改 draw 方法
     def draw(self, screen: pygame.Surface):
         """绘制内容到屏幕 - 增强版，支持图片标记和图片叠加渲染"""
@@ -1181,76 +1184,69 @@ class DynamicLoader:
         if self.scrollbar_visible and len(self.history) > 0:
             self._draw_scrollbar(screen)
     def _render_and_draw_image_mark(self, screen, item, x, y):
-        """渲染并绘制图片标记"""
+        """渲染并绘制单张图片标记 - 最终优化版"""
         metadata = item.metadata
-        
-        # 检查是否有缓存的图片
-        if metadata.get('cached_surface') and not metadata.get('needs_rendering'):
-            surface = metadata['cached_surface']
-            screen.blit(surface, (x, y))
-            return surface
-        
-        # 需要渲染图片
         img_url = metadata.get('img_url')
         img_info = metadata.get('img_info')
         
         if not img_url or not img_info:
-            # 绘制错误指示
             self._draw_image_error(screen, x, y, item.height - 10)
             return None
         
         try:
-            # 加载图片
-            if not os.path.exists(img_info['path']):
-                # 尝试其他路径
-                alt_path = os.path.join("./", os.path.basename(img_info['path']))
-                if not os.path.exists(alt_path):
-                    self._draw_image_error(screen, x, y, item.height - 10)
-                    return None
-                img_info['path'] = alt_path
-            
-            image = pygame.image.load(img_info['path']).convert_alpha()
-            
-            # 裁剪
-            clip_pos = metadata.get('clip_pos') or (0, 0)
-            clip_x, clip_y = clip_pos
-            clip_width = img_info['original_width']
-            clip_height = img_info['original_height']
-            
-            # 确保裁剪区域有效
-            img_width, img_height = image.get_size()
-            if clip_x + clip_width > img_width:
-                clip_width = img_width - clip_x
-            if clip_y + clip_height > img_height:
-                clip_height = img_height - clip_y
-            
-            if clip_width > 0 and clip_height > 0:
-                clip_rect = pygame.Rect(clip_x, clip_y, clip_width, clip_height)
-                clipped_image = image.subsurface(clip_rect)
-            else:
+            # 1. [LRU] 获取图片
+            image = self._get_image_from_cache(img_info.get('path'))
+            if not image:
                 self._draw_image_error(screen, x, y, item.height - 10)
-                return None 
+                return None
             
-            # 调整大小
+            # 2. [裁剪]
+            # 优先使用 PRINTIMG 传入的 clip 参数，其次使用 CSV 默认值
+            param_clip = metadata.get('clip_pos')
+            if param_clip:
+                clip_x, clip_y = param_clip
+            else:
+                clip_x = img_info.get('clip_x', 0)
+                clip_y = img_info.get('clip_y', 0)
+            
+            # 宽度/高度通常由 CSV 定义
+            clip_w = img_info.get('original_width', image.get_width())
+            clip_h = img_info.get('original_height', image.get_height())
+            
+            img_w, img_h = image.get_size()
+            needs_crop = (clip_x > 0 or clip_y > 0 or clip_w < img_w or clip_h < img_h)
+            
+            if needs_crop:
+                safe_w = min(clip_w, img_w - clip_x)
+                safe_h = min(clip_h, img_h - clip_y)
+                if safe_w > 0 and safe_h > 0:
+                    image = image.subsurface(pygame.Rect(clip_x, clip_y, safe_w, safe_h))
+            
+            # 3. [缩放]
             size = metadata.get('size')
             if size:
                 target_width, target_height = size
-                clipped_image = pygame.transform.scale(clipped_image, (target_width, target_height))
-            
-            # 缓存结果
-            metadata['cached_surface'] = clipped_image
-            metadata['needs_rendering'] = False
+                image = pygame.transform.scale(image, (target_width, target_height))
             
             # 绘制
-            screen.blit(clipped_image, (x, y))
+            screen.blit(image, (x, y))
             
-            # 更新点击区域（如果有点击功能）
+            # 4. [点击区域]
             if metadata.get('clickable'):
+                rect = pygame.Rect(x, y, image.get_width(), image.get_height())
+                
                 for region in self.clickable_regions:
                     if region.get('content_item') == item:
-                        region['rect'] = pygame.Rect(x, y, clipped_image.get_width(), clipped_image.get_height())
+                        region['rect'] = rect
+                        self.active_clickable_regions.append({
+                            'id': region['id'],
+                            'rect': rect,
+                            'click_value': region['click_value'],
+                            'text': region.get('text', ''),
+                            'type': region.get('type', 'image')
+                        })
             
-            return clipped_image
+            return image
             
         except Exception as e:
             print(f"渲染图片标记失败 {img_url}: {e}")

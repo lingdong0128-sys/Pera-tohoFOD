@@ -35,7 +35,7 @@ def event_对象选择(self):
         if not draw_type:
             self.console.init.charaters_key[i]['draw_type'] = '初始绘'
             draw_type = '初始绘'
-        default_name = '顔絵_服_通常' if chara_data.get('draw_type') == '初始绘' else '别顔_服_通常'
+        default_name = '顔絵_服_通常' if chara_data.get('draw_type') == '初始绘' else '別顔_服_通常'
         DrawName = chara_data.get('DrawName', default_name)
         img = f"{img}{i}_{draw_type}_{DrawName}_{i}"
         print(img)
