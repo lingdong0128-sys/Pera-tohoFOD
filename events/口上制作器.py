@@ -52,7 +52,15 @@ def event_open_kojo_maker(this):
         return list(result_list)
 
     # --------------------------------
-
+    events_meta = {}
+    for event_key, event_func in this.event_manager.events.items():
+        events_meta[event_key] = {
+            'is_main': getattr(event_func, 'is_main_event', False)
+        }
+    init.chara_ids=init.chara_ids if init.chara_ids else ['0']
+    init.chara_name=[]
+    for i in init.chara_ids:
+        init.chara_name.append(init.charaters_key[i].get('名前'))
     # 1. 准备元数据 (加入硬编码的默认值，防止下拉框为空)
     game_meta = {
         'ABL': get_data_list('Abl', ['C感觉', 'V感觉', 'A感觉', '技巧', '顺从', '欲望']),
@@ -67,17 +75,17 @@ def event_open_kojo_maker(this):
         'PALAM': ['润滑', '恭顺', '欲情', '屈服', '羞耻', '恐怖'],
 
         # 角色与图片
-        'CHARAS': init.chara_ids if init.chara_ids else ['0'],
+        'CHARAS': init.chara_name,
         'IMAGES': list(this.console.image_data.keys()),
-        
         # 事件列表
-        'EVENTS': list(this.event_manager.events.keys())
+        'EVENTS': list(this.event_manager.events.keys()),
+        'EVENTS_META': events_meta,
     }
     
     # 2. 启动 GUI
     root = tk.Tk()
     # [关键] 窗口置顶，防止被全屏游戏遮挡
-    root.attributes('-topmost', True) 
+    #root.attributes('-topmost', True) 
     
     app = KojoEditorApp(root, game_meta)
     

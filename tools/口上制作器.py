@@ -23,7 +23,46 @@ class KojoEditorApp:
         
         self.setup_ui()
         self.new_project() # 初始化一个空项目
-
+    def filter_events(self):
+        """根据选择的类型过滤事件列表"""
+        if not hasattr(self, 'all_events'):
+            return
+            
+        event_type = getattr(self, 'event_type_var', tk.StringVar(value="所有事件")).get()
+        
+        if event_type == "所有事件":
+            filtered_events = self.all_events
+        elif event_type == "仅主事件":
+            # 过滤主事件
+            filtered_events = [
+                event for event in self.all_events 
+                if self.events_meta.get(event, {}).get('is_main', False)
+            ]
+        else:  # "仅普通事件"
+            # 过滤普通事件
+            filtered_events = [
+                event for event in self.all_events 
+                if not self.events_meta.get(event, {}).get('is_main', True)
+            ]
+        
+        # 更新下拉框选项
+        if hasattr(self, 'cmb_event'):
+            self.cmb_event['values'] = filtered_events
+            if filtered_events and not self.cmb_event.get():
+                self.cmb_event.current(0)
+    def on_event_search(self, event):
+        """事件搜索功能"""
+        if not hasattr(self, 'cmb_event') or not hasattr(self, 'all_events'):
+            return
+        
+        search_text = self.cmb_event.get().lower()
+        filtered = [evt for evt in self.all_events if search_text in evt.lower()]
+        
+        # 限制显示数量
+        if len(filtered) > 50:
+            filtered = filtered[:50] + [f"...等 {len(filtered)-50} 个事件"]
+        
+        self.cmb_event['values'] = filtered
     def setup_ui(self):
         # --- 顶部工具栏 ---
         toolbar = tk.Frame(self.root, bd=1, relief=tk.RAISED)
@@ -108,7 +147,9 @@ class KojoEditorApp:
             tags = ('text',)
         elif node_data['type'] == 'call':
             evt = node_data.get('target_event', '未选择')
-            display_text = f"🔗 [CALL] {evt}"
+            # 获取事件类型标记
+            event_type = "⭐" if node_data.get('is_main_event', False) else "○"
+            display_text = f"🔗 [CALL] {event_type} {evt}"
             tags = ('call',)
         elif node_data['type'] == 'image':
             img = node_data.get('img_key', '未选择')
@@ -230,7 +271,7 @@ class KojoEditorApp:
             frame_tags = tk.Frame(self.frame_right)
             frame_tags.pack(fill=tk.X, padx=5, pady=2)
             tk.Label(frame_tags, text="插入: ").pack(side=tk.LEFT)
-            quick_tags = [("主角", "{master_name}"), ("对象", "{target_name}"), ("称呼", "{call_name}"), ("❤", "❤"), ("\\n", "\\n")]
+            quick_tags = [("主角", "{master_name}"), ("对象", "{target_name}"), ("称呼", "{call_name}"), ("❤", "❤")]
             for label, tag in quick_tags:
                 tk.Button(frame_tags, text=label, command=lambda t=tag: self.insert_tag(t), font=("Arial", 8), pady=0).pack(side=tk.LEFT, padx=2)
 
@@ -247,10 +288,55 @@ class KojoEditorApp:
             
         elif node['type'] == 'call':
             tk.Label(self.frame_right, text="调用其他事件", font=('bold', 12)).pack(pady=5)
-            self.cmb_event = ttk.Combobox(self.frame_right, values=self.meta.get('EVENTS', []))
-            self.cmb_event.set(node.get('target_event', ''))
+            
+            # 添加事件类型说明
+            tk.Label(self.frame_right, text="⭐ = 主事件 (影响存档) | ○ = 普通事件", 
+                    fg="gray", font=('Arial', 9)).pack(pady=(0, 10))
+            
+            # 添加事件类型过滤选项
+            tk.Label(self.frame_right, text="事件类型筛选:").pack(anchor=tk.W, padx=5)
+            event_types_frame = tk.Frame(self.frame_right)
+            event_types_frame.pack(fill=tk.X, padx=5)
+            
+            # 创建事件类型变量
+            self.event_type_var = tk.StringVar(value=node.get('event_type_filter', "所有事件"))
+            
+            # 事件类型选项
+            event_type_options = ["所有事件", "仅主事件", "仅普通事件"]
+            for i, option in enumerate(event_type_options):
+                tk.Radiobutton(event_types_frame, text=option, variable=self.event_type_var, 
+                            value=option, command=self.filter_events).pack(side=tk.LEFT, padx=5)
+            
+            # 下拉框选择事件（带搜索功能）
+            tk.Label(self.frame_right, text="选择要调用的事件 (支持输入搜索):").pack(anchor=tk.W, padx=5, pady=(10,0))
+            
+            # 创建带搜索功能的Combobox
+            self.cmb_event = ttk.Combobox(self.frame_right)
             self.cmb_event.pack(fill=tk.X, padx=5)
-            tk.Button(self.frame_right, text="保存设置", command=lambda: self.save_node_data(node)).pack(pady=10)
+            
+            # 添加搜索绑定
+            self.cmb_event.bind('<KeyRelease>', self.on_event_search)
+            
+            # 保存当前事件列表（用于过滤和搜索）
+            self.all_events = self.meta.get('EVENTS', [])
+            self.events_meta = self.meta.get('EVENTS_META', {})
+            
+            # 初始化事件列表
+            self.filter_events()
+            
+            # 设置选中的事件
+            current_event = node.get('target_event', '')
+            if current_event and current_event in self.all_events:
+                self.cmb_event.set(current_event)
+            
+            # 显示事件详情
+            if current_event in self.events_meta:
+                meta = self.events_meta[current_event]
+                event_info = f"事件类型: {'⭐ 主事件' if meta.get('is_main', False) else '○ 普通事件'}"
+                tk.Label(self.frame_right, text=event_info, fg="blue").pack(pady=5)
+            
+            tk.Button(self.frame_right, text="保存设置", 
+                    command=lambda: self.save_node_data(node)).pack(pady=10)
 
         elif node['type'] == 'image':
             tk.Label(self.frame_right, text="显示图片", font=('bold', 12)).pack(pady=5)
@@ -369,6 +455,7 @@ class KojoEditorApp:
             node['color'] = self.entry_color.get()
         elif node['type'] == 'call':
             node['target_event'] = self.cmb_event.get()
+            node['event_type_filter'] = self.event_type_var.get() if hasattr(self, 'event_type_var') else "所有事件"
         elif node['type'] == 'image':
             node['img_key'] = self.cmb_img.get()
             
@@ -528,31 +615,48 @@ class KojoEditorApp:
             messagebox.showinfo("成功", "多差分脚本已生成！")
 
     def _compile_node(self, node, lines, indent):
-        prefix = "    " * indent
-        
-        if node['type'] == 'branch':
-            cond = node.get('condition', 'True')
-            lines.append(f"{prefix}if {cond}:")
-            if 'children' in node and node['children']:
-                for child in node['children']:
-                    self._compile_node(child, lines, indent + 1)
-            else:
-                lines.append(f"{prefix}    pass")
+            prefix = "    " * indent
             
-        elif node['type'] == 'text':
-            color = node.get('color', 'COL_TALK')
-            content = node.get('content', '')
-            lines.append(f'{prefix}this.console.PRINT(f"{content}", colors={color})')
-            lines.append(f'{prefix}this.console.INPUT()')
-            
-        elif node['type'] == 'call':
-            evt = node.get('target_event', '')
-            lines.append(f"{prefix}this.event_manager.trigger_event('{evt}', this)")
-            
-        elif node['type'] == 'image':
-            img = node.get('img_key', '')
-            # 生成 PRINTIMG 代码
-            lines.append(f'{prefix}this.console.PRINTIMG("{img}")')
+            if node['type'] == 'branch':
+                cond = node.get('condition', 'True')
+                lines.append(f"{prefix}if {cond}:")
+                if 'children' in node and node['children']:
+                    for child in node['children']:
+                        self._compile_node(child, lines, indent + 1)
+                else:
+                    lines.append(f"{prefix}    pass")
+                
+            elif node['type'] == 'text':
+                color = node.get('color', 'COL_TALK')
+                content_raw = node.get('content', '')
+                
+                # [核心改进] 按换行符切割文本，生成多个 PRINT 语句
+                # splitlines() 会自动处理 \r\n, \n 等各种换行符
+                content_lines = content_raw.splitlines()
+                
+                # 如果内容为空，或者只有空行，至少输出一个空行
+                if not content_lines:
+                    content_lines = [""]
+                    
+                for i, line_text in enumerate(content_lines):
+                    # 只有最后一行才添加 INPUT (等待)，前面的行只负责显示
+                    # 除非你希望每行都等待，那就在这里改逻辑
+                    
+                    # 清理首尾空格 (可选，取决于你想不想要保留缩进)
+                    # line_text = line_text.strip() 
+                    
+                    lines.append(f'{prefix}this.console.PRINT(f"{line_text}", colors={color})')
+                
+                # 在所有文本打印完后，添加一次 INPUT
+                lines.append(f'{prefix}this.console.INPUT()')
+                
+            elif node['type'] == 'call':
+                evt = node.get('target_event', '')
+                lines.append(f"{prefix}this.event_manager.trigger_event('{evt}', this)")
+                
+            elif node['type'] == 'image':
+                img = node.get('img_key', '')
+                lines.append(f'{prefix}this.console.PRINTIMG("{img}")')
 
     # ================= 项目存取 =================
     
