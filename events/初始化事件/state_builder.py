@@ -152,6 +152,9 @@ def event_get_context_state(this):
         # 把整个 allstate 字典放进去，存档时 SaveSystem 会把它递归写入 JSON
         # =======================================================
         'world_state': this.console.allstate,
+        # [新增] 存档时，把当前的地图状态存进去
+        # 这包含了 'status': 'corrupted' 这种动态变化
+        'map_state': getattr(this.console, 'map_data', {}), 
         # --- 会话状态 ---
         'session': {
             'chara_id': target_id,
@@ -191,6 +194,17 @@ def event_apply_save_data(this):
     trigger: apply_save
     """
     save_data = getattr(this, 'temp_save_data', None)
+    # [核心校准逻辑]
+    if 'map_state' in save_data:
+        # 1. 用存档里的地图（包含腐化状态）覆盖内存
+        this.console.map_data = save_data['map_state']
+        
+        # 2. 重新触发 map 事件
+        # 因为 map_data 变了，我们需要重新计算 charater_pwds
+        # 这一步就是"校准"：让角色位置与载入的地图状态对齐
+        this.event_manager.trigger_event('map', this)
+        
+        this.console.PRINT(">>> 地图状态已校准。", colors=(100, 255, 100))
     if not save_data: return None
 
     # 1. 获取基础模板 (用于填充那些存档里没有的临时数据)
@@ -259,6 +273,6 @@ def event_apply_save_data(this):
     return new_ctx
 
 # 注册触发器
-event_build_allstate.event_trigger = "build_state"
+event_build_allstate.event_trigger = "build_allstate"
 event_get_context_state.event_trigger = "get_context_state"
 event_apply_save_data.event_trigger = "apply_save"
