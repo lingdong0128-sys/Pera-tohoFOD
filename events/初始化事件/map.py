@@ -39,14 +39,13 @@ def event_map(this):
         # --- 检查腐化状态 ---
         # 如果这个大地图被标记为腐化，可能需要特殊处理
         # 比如跳过更新，或者将里面的角色全部移动到地牢入口
-        if content.get('status') == 'corrupted':
+        if content.get('状态') == 'corrupted':
             # print(f"DEBUG: {big_map} 已腐化，跳过常规位置更新")
             continue 
-
         # --- 遍历房间 ---
         for key, value in content.items():
             # 过滤掉非房间的属性键 (status, dungeon_level 等)
-            if key in ['status', 'dungeon_level', 'description']:
+            if key in ['状态', '腐化等级']:
                 continue
                 
             small_map = key
