@@ -15,6 +15,7 @@ class initall:
         self.readcharact_csv()
         self.initglobalkey()
         self.initcharates()
+
     def readcharact_csv(self):
         charact_csv_div=self.csv_dir+'characters/'
         for root, dirs, files in self.os.walk(charact_csv_div):
@@ -39,6 +40,7 @@ class initall:
                             current_file_data.append(row)
                     self.charaseting.append(current_file_data)
         return self.charaseting
+
     def readglobal_csv(self):
         global_csv_path=self.csv_dir+'global/'
         for root, dirs, files in self.os.walk(global_csv_path):
@@ -66,6 +68,7 @@ class initall:
                     self.global_settings.append(current_file_data)
                     self.global_settings[globalnumtmp].insert(0,['gloabkey',gloablkey]) #在每个全局设置的开头插入一个标识符，用于区分不同的全局设置
                     globalnumtmp+=1
+
     def initglobalkey(self):
         for glb in self.global_settings:
             global_key_tmp={}
@@ -77,16 +80,32 @@ class initall:
                         key=row[0]
                         if key=='gloabkey':
                             continue
+                        
+                        # Item 的特殊逻辑保持不变
                         if glb[0][1]=='Item':
                             item_key_id=['name','price','idn','ex']
                             global_key_tmp[key]={}
-                            for i in range(2,len(row)):
+                            # 防止 row 长度不足导致索引越界，加个简单的切片保护或者逻辑判断
+                            process_len = min(len(row), len(item_key_id) + 2)
+                            for i in range(2, process_len):
                                 global_key_tmp[key][item_key_id[i-2]]=row[i-1]
+                        
+                        # 修改后的通用逻辑
                         else:
-                            value = row[1] if len(row) > 1 else ""
+                            if len(row) > 2:
+                                # 如果有多个值，存为列表 (从第二个元素开始到最后)
+                                value = row[1:]
+                            elif len(row) == 2:
+                                # 如果只有一个值，保持存为字符串
+                                value = row[1]
+                            else:
+                                # 只有key没有value的情况
+                                value = ""
                             global_key_tmp[key] = value
+
             self.global_key[global_key]=global_key_tmp
         self.global_settings.clear()
+
     def initcharates(self):
         for chara in self.charaseting:
             charaters_key_tmp={}

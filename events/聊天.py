@@ -9,8 +9,6 @@ def event_聊天(this):
     # 这会返回当前游戏的一个完整快照
     state = this.event_manager.trigger_event('get_context_state', this)
     
-    # 如果还没有实现 get_context，可以用这个临时方案代替：
-    # state = {'session': {}, 'globals': {'variables': {}}} 
 
     # 3. 从大字典提取数据构建上下文
     # 这样我们就不用手动写死 '昼' 或者 '日常' 了

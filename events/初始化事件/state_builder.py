@@ -110,7 +110,59 @@ def event_build_allstate(this):
             'full_key': full_img_key, # 前端直接读这个就行
             'available': available_types, 
         }
-
+# 8. [新增] 物品栏 (Inventory) - 竖线分隔版
+        # 支持格式: "1:5|2:1|3" (ID:数量 | ID:数量 | ID)
+        inventory = {}
+        raw_items = raw_data.get('物品栏')
+        
+        if raw_items:
+            # 1. 统一转为字符串并清洗
+            # 无论 init.py 读成什么样，先转成字符串
+            if isinstance(raw_items, list):
+                item_str = "".join(str(x) for x in raw_items)
+            else:
+                item_str = str(raw_items)
+            
+            # 去掉可能的方括号、引号和首尾空格
+            clean_str = item_str.replace('[', '').replace(']', '').replace("'", "").replace('"', '').strip()
+            
+            if clean_str:
+                # 2. 按 '|' 分割不同物品
+                # 如果用户还是用了逗号，这里做一个兼容替换
+                if '|' not in clean_str and ',' in clean_str:
+                    clean_str = clean_str.replace(',', '|')
+                
+                item_groups = clean_str.split('|')
+                
+                for group in item_groups:
+                    group = group.strip()
+                    if not group: continue
+                    
+                    # 3. 解析 "ID:数量"
+                    if ':' in group:
+                        # 格式: "2:5" -> ID=2, Count=5
+                        parts = group.split(':')
+                        item_id = parts[0].strip()
+                        try:
+                            count = int(parts[1].strip())
+                        except ValueError:
+                            count = 1
+                    else:
+                        # 格式: "3" -> ID=3, Count=1 (默认)
+                        item_id = group.strip()
+                        count = 1
+                    
+                    # 4. 存入字典
+                    if item_id:
+                        # 累加逻辑（防止写了两次 "1:1|1:2"）
+                        inventory[item_id] = inventory.get(item_id, 0) + count
+        
+        # 存入角色状态
+        char_state['inventory'] = inventory
+        
+        # 存入角色状态
+        # 因为 allstate 会被存档，所以这里面的变动会自动保存
+        char_state['inventory'] = inventory
         # 将构建好的单人状态存入总字典
         allstate[chara_id] = char_state
 
@@ -139,7 +191,6 @@ def event_get_context_state(this):
     
     master_id = '0'
     now = datetime.datetime.now()
-
     # 构建大字典
     context = {
         # --- 核心引用 (不可存档) ---
