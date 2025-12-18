@@ -185,7 +185,71 @@ class EraKojoHandler:
         relation_dict = self.init.charaters_key[subject].get('相性', {})
         # 默认相性为 100% (即 100)，如果没有定义
         return int(relation_dict.get(target_chara_id, 100))
+    # ==========================
+    # 物品操作接口 (Inventory API)
+    # ==========================
+    
+    def ITEM_ADD(self, item_id, count=1, chara_id=None):
+        """
+        获得物品
+        :param item_id: 物品ID (对应 Item.csv)
+        :param count: 数量
+        :param chara_id: 指定角色，默认为 TARGET
+        """
+        target = chara_id if chara_id is not None else self.TARGET
+        if not target: return
+        
+        # 获取角色状态引用
+        chara_state = self.console.allstate.get(target)
+        if not chara_state: return
 
+        # 确保 inventory 字典存在
+        if 'inventory' not in chara_state:
+            chara_state['inventory'] = {}
+            
+        inv = chara_state['inventory']
+        item_id = str(item_id)
+        
+        # 增加数量
+        inv[item_id] = inv.get(item_id, 0) + count
+        
+        # 获取物品名称用于提示
+        item_name = self.ITEMNAME.get(item_id, f"未知物品({item_id})")
+        self.console.PRINT(f"{chara_state['name']} 获得了 {item_name} x{count}", colors=(100, 255, 100))
+
+    def ITEM_REMOVE(self, item_id, count=1, chara_id=None):
+        """
+        移除物品
+        """
+        target = chara_id if chara_id is not None else self.TARGET
+        if not target: return
+        
+        chara_state = self.console.allstate.get(target)
+        inv = chara_state.get('inventory', {})
+        item_id = str(item_id)
+        
+        if item_id in inv:
+            if inv[item_id] >= count:
+                inv[item_id] -= count
+                # 如果数量为0，可以选择删除键，或者留着显示0
+                if inv[item_id] <= 0:
+                    del inv[item_id]
+                
+                item_name = self.ITEMNAME.get(item_id, f"未知物品({item_id})")
+                self.console.PRINT(f"{chara_state['name']} 失去了 {item_name} x{count}", colors=(255, 100, 100))
+                return True
+            else:
+                self.console.PRINT(f"物品数量不足！", colors=(255, 0, 0))
+                return False
+        return False
+
+    def ITEM_HAS(self, item_id, chara_id=None):
+        """查询拥有数量"""
+        target = chara_id if chara_id is not None else self.TARGET
+        if not target: return 0
+        
+        inv = self.console.allstate.get(target, {}).get('inventory', {})
+        return inv.get(str(item_id), 0)
     # ==========================
     # 临时/事件状态变量 (通常在 ctx 中)
     # ==========================

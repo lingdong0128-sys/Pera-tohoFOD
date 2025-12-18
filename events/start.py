@@ -37,107 +37,205 @@ def event_start(this):
              # 如果以后做回合制战斗，也可以分流到这里
              pass
 def handle_daily_routine(this, ctx):
-    """原本 start.py 里的逻辑封装到这里"""
+    """
+    [日常模式主循环]
+    包含：UI渲染、立绘显示、状态栏、地图移动检测
+    """
     import os
+    
+    # 辅助函数：生成彩色进度条字符串
+    def get_ui_bar(label, current, max_val, length=10):
+        try:
+            current = int(current)
+            max_val = int(max_val)
+        except:
+            current, max_val = 0, 1
+        
+        if max_val <= 0: max_val = 1
+        percent = min(1.0, current / max_val) if max_val > 0 else 0
+        filled_len = int(length * percent)
+        
+        # 动态颜色 (绿 -> 黄 -> 红)
+        if percent > 0.5: color = (50, 255, 50)
+        elif percent > 0.2: color = (255, 255, 50)
+        else: color = (255, 50, 50)
+        
+        bar_text = "█" * filled_len
+        empty_text = "░" * (length - filled_len)
+        
+        return this.cs(f"{label} ").set_color((200, 200, 200)) + \
+               this.cs(bar_text).set_color(color) + \
+               this.cs(empty_text).set_color((60, 60, 60)) + \
+               this.cs(f" {current}/{max_val}").set_color((200, 200, 200))
+
     running = True
     while running:
-        input = this.console.INPUT()
-        # 1. 调用对象选择 (现在 EventManager 修复后，这里能收到数据了)
-        result = this.event_manager.trigger_event('对象选择', this)
+        # =================================================
+        # 0. [核心] 每一帧重新获取最新状态快照
+        # =================================================
+        # 这样确保了每次循环都能读到最新的好感度、位置、属性变化
+        ctx = this.event_manager.trigger_event('get_context_state', this)
+        
+        # 安全检查：如果状态丢失，强制退出防止崩溃
+        if not ctx: break
 
-        # 安全检查：防止对象选择出错返回 None 导致崩溃
+        # =================================================
+        # 1. [场景切换] 自动检测腐化区域 -> 切换地牢
+        # =================================================
+        current_location = ctx['session']['location'] # 从 ctx 获取当前小地图
+        
+        # 大地图判定逻辑 (这里假设位置结构是 '大地图' 键，或者从 allstate 获取)
+        # 为了兼容之前的逻辑，我们还是去 charater_pwds 拿大地图ID
+        current_big_map_id = this.charater_pwds['0'].get('大地图')
+        
+        map_data = getattr(this.console, 'map_data', {})
+        current_map_info = map_data.get(current_big_map_id, {})
+        
+        if current_map_info.get('status') == 'corrupted':
+            this.console.PRINT(f"\n警告：[{current_big_map_id}] 已被异变吞噬！", colors=(255, 50, 50))
+            this.console.PRINT("正在切入异变空间...", colors=(255, 100, 100))
+            
+            # 修改底层状态
+            this.console.init.global_key['System']['SCENE'] = '地牢'
+            
+            # 确保有地牢入口坐标
+            if '地牢位置' not in this.charater_pwds['0']:
+                this.charater_pwds['0']['地牢位置'] = 'room_0'
+                
+            running = False
+            continue 
+
+        # =================================================
+        # 2. [数据准备] 从 ctx 提取主角和目标
+        # =================================================
+        master_state = ctx['master']
+        target_state = ctx['chara'] # 如果没选人，这里可能是主角自己或者 None
+        
+        # 原始数据源 (用于读取上限 MaxBase)
+        # 注意：这里我们通过 ctx['master']['data'] 也能拿到原始 CSV 引用
+        master_raw = master_state.get('data', {})
+        target_raw = target_state.get('data', {}) if target_state else {}
+
+        # 获取同地图角色列表
+        result = this.event_manager.trigger_event('对象选择', this)
         if result:
             InOneMapCharater, InOneMapCharaterImg, CharaList = result
         else:
             InOneMapCharater, InOneMapCharaterImg, CharaList = ("", [], [])
 
-        # 2. [修复] 图片列表构建逻辑
+        # =================================================
+        # 3. [UI渲染] 立绘与信息
+        # =================================================
         CharaterImgList = []
-        Tmp = 0  # [修复] 计数器要在循环外面初始化！
+        Tmp = 0
         for i in InOneMapCharaterImg:
-            # [修复] 必须在循环内部创建新字典，否则所有图片都会变成最后一张
-            CharaterImgDict = {}
-
-            CharaterImgDict['img'] = i  # 注意：这里最好用 img 键名，对应 PRINTIMG 的参数
-            CharaterImgDict['offset'] = (Tmp * 180, 0)
-
-            # 如果需要指定类型和ID，最好也在对象选择里传出来，或者这里写死
-            # CharaterImgDict['draw_type'] = '...'
-
+            if not i: continue
+            CharaterImgDict = {'img': i, 'offset': (Tmp * 180, 0)}
             CharaterImgList.append(CharaterImgDict)
-            Tmp += 1  # 计数器递增
+            Tmp += 1
+        
         this.event_manager.trigger_event('初会面检查', this)
-        this.console.PRINTIMG("", img_list=CharaterImgList, size=(180, 180))
-        this.console.PRINT(InOneMapCharater)
-        this.console.PRINT(this.cs("[1]测试文本").click("1"), "         ", this.cs("[2]查询位置").click(
-            "2"), "         ", this.cs("[3]商店").click("3"), "         ", this.cs("[4]音乐控制").click("4"))
-        this.console.PRINT(this.cs("[5]显示当前音乐").click("5"), "     ", this.cs("[99]退出").click(
-            "99"), "            ", this.cs("[10]查看当前加载事件").click("10"), "           ", this.cs("[8]helloworld！").click("8"))
-        this.console.PRINT(this.cs("[100]四处张望").click("100"), "         ", this.cs("[200]badapple？").click(
-            "200"), "         ", this.cs("[22]聊天").click("22"), "          ", this.cs('[33]测试伪3D').click('33'),"       ",this.cs('[11]物品栏').click('11'))
-        this.console.PRINT(this.cs("[44]重载事件").click("44"),'        ',this.cs('[20]保存世界').click('20'),'     ',this.cs('[12]移动').click('12'))
+        if CharaterImgList:
+            this.console.PRINTIMG(None, img_list=CharaterImgList, size=(180, 180))
+        
+        this.console.PRINT(InOneMapCharater) 
+        this.console.PRINT_DIVIDER("·", length=60)
 
-        if input == '99':
+        # [状态栏] 玩家信息 (从 ctx 读取)
+        m_attr = master_state.get('attributes', {})
+        m_base_raw = master_raw.get('基礎', {})
+        
+        m_hp = m_attr.get('体力', 0)
+        m_hp_max = int(m_base_raw.get('体力', 1500))
+        m_mp = m_attr.get('気力', 0)
+        m_mp_max = int(m_base_raw.get('気力', 1000))
+        
+        master_bars = get_ui_bar("【你】体力", m_hp, m_hp_max) + "    " + \
+                      get_ui_bar("気力", m_mp, m_mp_max)
+        this.console.PRINT(master_bars)
+
+        # [状态栏] 目标信息 (排除自己)
+        if target_state and target_state['id'] != '0':
+            t_attr = target_state.get('attributes', {})
+            t_base_raw = target_raw.get('基礎', {})
+            t_cflag = target_state.get('cflags', {})
+            
+            t_hp = t_attr.get('体力', 0)
+            t_hp_max = int(t_base_raw.get('体力', 1500))
+            t_favor = t_cflag.get('好感度', 0)
+            
+            target_info = this.cs(f"【{target_state.get('name')}】").set_color((255, 200, 100)) + "  " + \
+                          get_ui_bar("体力", t_hp, t_hp_max, length=8) + "  " + \
+                          this.cs(f"好感: {t_favor}").set_color((255, 100, 150))
+            this.console.PRINT(target_info)
+        else:
+            this.console.PRINT(" (尚未选择交互对象) ", colors=(100, 100, 100))
+
+        this.console.PRINT_DIVIDER("=", length=60)
+
+        # =================================================
+        # 4. [菜单选项]
+        # =================================================
+        this.console.PRINT(
+            this.cs("[1] 💬 对话/聊天").click("22"), "      ", 
+            this.cs("[2] 🔍 观察环境").click("100"), "      ",
+            this.cs("[3] 🛒 商店").click("3"), "      ",
+            this.cs("[4] 🎒 物品栏").click("11")
+        )
+        this.console.PRINT(
+            this.cs("[5] 🗺️ 移动/传送").click("12"), "      ",
+            this.cs("[6] 🎵 音乐控制").click("4"), "      ",
+            this.cs("[7] 💾 系统菜单").click("sys_menu"),"      ",
+            this.cs("[8] 🛠️ 伪3D测试").click("33")
+        )
+        this.console.PRINT(
+            this.cs("[99] 🚪 退出游戏").click("99")
+        )
+
+        # =================================================
+        # 5. [输入处理]
+        # =================================================
+        input_val = this.console.INPUT()
+
+        if input_val == '99':
             running = False
-        elif input:
-            # [必须有这一段逻辑]
-            # 只有当 start.py 识别到 c_ 开头的输入，才会执行赋值！
-            if input.startswith("c_"):
-                # 提取真实ID (去掉 c_)
-                target_id = input.split('_')[1]
-
-                # 存入字典！这一步做了，聊天.py 才能读到东西
+            
+        elif input_val:
+            # --- 角色选择 ---
+            if input_val.startswith("c_"):
+                target_id = input_val.split('_')[1]
+                # 修改底层，下次循环 get_context 会自动更新 target_state
                 this.console.init.charaters_key['0']['选择对象'] = target_id
-
-                # 获取名字用于提示
-                t_name = this.console.init.charaters_key[target_id].get('名前')
-                this.console.PRINT(f"已选择对象：{t_name}")
-                this.console.PRINT(f"已选择对象：{input}")
-            elif input=='20':
-                this.event_manager.trigger_event('save_menu', this)
-            elif input=='11':
-                this.event_manager.trigger_event('menu_inventory',this)
-            elif input=='12':
-                this.event_manager.trigger_event('移动菜单',this)
-            elif input == '44':
-                this.event_manager.trigger_event('reload', this)
-            elif input == '33':
-                this.event_manager.trigger_event('water_demo', this)
-            elif input == '1':
-                this.event_manager.trigger_event('text', this)
-            elif input == '22':
-                this.event_manager.trigger_event('聊天', this)
-            elif input == '2':
-                this.event_manager.trigger_event('getpwd', this)
-            elif input == '3':
-                this.event_manager.trigger_event('shop', this)
-            elif input == '4':
-                this.event_manager.trigger_event('music_control', this)
-            elif input == '5':
-                if this.console.music_box:
-                    status = this.console.music_box.get_status()
-                    current_volume = this.console.music_box.get_volume()
-                    this.console.PRINT(f"音乐状态: {status}")
-                    this.console.PRINT(f"当前音量: {current_volume:.2f}")
-                    if this.console.current_music_name:
-                        this.console.PRINT(
-                            f"当前音乐: {this.console.current_music_name}")
-                    elif this.console.music_box.url:
-                        music_name = os.path.basename(
-                            this.console.music_box.url)
-                        this.console.PRINT(f"当前音乐: {music_name}")
-                else:
-                    this.console.PRINT("音乐系统未初始化", colors=(255, 200, 200))
-                this.console.PRINT("按任意键继续...")
-                this.console.INPUT()
-            elif input == '10':
-                this.event_manager.trigger_event('logevent', this)
-            elif input == '8':
-                this.event_manager.trigger_event('helloworld', this)
-            elif input == '100':
-                this.event_manager.trigger_event('findthem', this)
-            elif input == '200':
-                this.event_manager.trigger_event('bad_apple', this)
+                
+                # 获取新名字用于提示
+                new_target = this.console.allstate.get(target_id)
+                t_name = new_target.get('name') if new_target else "未知"
+                this.console.PRINT(f"已将目光锁定在：{t_name}", colors=(200, 255, 200))
+            
+            # --- 常用菜单 ---
+            elif input_val == '22': this.event_manager.trigger_event('聊天', this)
+            elif input_val == '100':this.event_manager.trigger_event('findthem', this)
+            elif input_val == '3':  this.event_manager.trigger_event('shop', this)
+            elif input_val == '11': this.event_manager.trigger_event('menu_inventory', this)
+            elif input_val == '4':  this.event_manager.trigger_event('music_control', this)
+            elif input_val == '12': this.event_manager.trigger_event('system_move', this)
+            
+            # --- 系统菜单 ---
+            elif input_val == 'sys_menu':
+                this.console.PRINT("系统菜单:", colors=(100, 255, 255))
+                this.console.PRINT(
+                    this.cs("[20] 保存世界").click("20"), "    ", 
+                    this.cs("[21] 读取世界").click("21"), "    ",
+                    this.cs("[44] 重载事件").click("44")
+                )
+                continue 
+                
+            elif input_val == '20': this.event_manager.trigger_event('system_save', this)
+            elif input_val == '21': this.event_manager.trigger_event('system_load', this)
+            elif input_val == '44': this.event_manager.trigger_event('reload', this)
+            
+            elif input_val == '33': this.event_manager.trigger_event('water_demo', this)
+            
             this.console.PRINT("")
 def handle_dungeon_crawling(this):
     """地牢模式主循环 - 修复版"""

@@ -103,3 +103,4 @@ def event_初始之地(this):
 
 # 注册事件
 event_初始之地.event_trigger = "初始之地"
+event_初始之地.is_main_event = True

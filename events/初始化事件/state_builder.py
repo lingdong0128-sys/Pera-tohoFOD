@@ -2,58 +2,130 @@ import datetime
 
 def event_build_allstate(this):
     """
-    初始化构建所有角色的状态字典 (allstate)
-    通常在游戏启动(start.py)或读档后调用一次
-    trigger: build_state
+    初始化构建所有角色的状态字典 (allstate) - 全量同步版 (含 Base, Abl, Talent, Exp, Mark, Cflag, Ex)
     """
     init = this.console.init
     allstate = {}
 
-    # 遍历所有已注册的角色ID
+    # --- 0. 辅助函数：创建默认模板 ---
+    def create_template(csv_name):
+        template = {}
+        # 尝试获取全局定义 (兼容大小写及首字母大写)
+        def_dict = init.global_key.get(csv_name, {}) or \
+                   init.global_key.get(csv_name.upper(), {}) or \
+                   init.global_key.get(csv_name.capitalize(), {})
+
+        for key, val in def_dict.items():
+            # 获取属性名
+            prop_name = str(val)
+            if isinstance(val, dict):
+                prop_name = val.get('name') or val.get('名前') or str(key)
+            
+            if prop_name:
+                template[str(prop_name)] = 0 # 默认值 0
+        return template
+
+    # [预生成所有模板]
+    base_template = create_template('Base')
+    abl_template = create_template('Abl')
+    talent_template = create_template('Talent')
+    exp_template = create_template('exp')
+    mark_template = create_template('Mark')
+    cflag_template = create_template('Cflag') 
+    ex_template = create_template('ex') # [新增] 对应 ex.csv
+
+    # 获取装备定义
+    equip_slots_def = init.global_key.get('Equip', {})
+    clothing_db = init.global_key.get('Tequip', {})
+
+    # --- 遍历所有已注册的角色 ---
     for chara_id in init.chara_ids:
-        # 获取原始 CSV 数据引用
         raw_data = init.charaters_key.get(chara_id, {})
         
-        # 1. 基础信息构建
+        # 1. 基础信息
         char_state = {
             'id': chara_id,
             'name': raw_data.get('名前', '未命名'),
             'callname': raw_data.get('呼び名', raw_data.get('名前', '未命名')),
             'fullname': raw_data.get('名前', ''), 
-            'data': raw_data,  # 保留原始数据的引用 (这是联动的关键)
+            'data': raw_data, 
         }
 
-        # 2. 才能系统 (素質 -> talents)
-        talents = {}
+        # 2. 才能 (Talent)
+        talents = talent_template.copy()
         if '素質' in raw_data:
             for k, v in raw_data['素質'].items():
-                try:
-                    talents[k] = int(v)
-                except ValueError:
-                    talents[k] = v 
+                try: talents[k] = int(v)
+                except: talents[k] = v 
         char_state['talents'] = talents
 
-        # 3. 属性值 (基础 + 能力 -> attributes)
+        # 3. [核心修改] 属性值校准 (Base + Abl -> attributes)
+        # 逻辑：遍历所有可能的属性，如果角色CSV里有定义，就设为CSV里的值(最大值)；否则设为0
         attributes = {}
-        # 加载基础 (BASE)
-        if '基础' in raw_data:
-            for k, v in raw_data['基础'].items():
+        
+        # --- 处理 Base (基础数值：体力、气力等) ---
+        # 1. 获取源数据 (兼容多种写法：基礎/基础/BASE)
+        # 这一步非常关键，解决了"体力为0"的 Bug
+        source_base = raw_data.get('基礎') or raw_data.get('基础') or raw_data.get('BASE') or {}
+        
+        # 2. 遍历全局定义的模板 (base_template 包含所有可能的属性名)
+        for key in base_template.keys():
+            # 检查角色是否有这个属性
+            if key in source_base:
                 try:
-                    attributes[k] = int(v)
+                    # [校准] 将当前值(attributes) 初始化为 CSV中的设定值(最大值)
+                    attributes[key] = int(source_base[key])
                 except ValueError:
-                    attributes[k] = 0
-        # 加载能力 (ABL)
-        if '能力' in raw_data:
-            for k, v in raw_data['能力'].items():
+                    attributes[key] = 0
+            else:
+                # 没定义则默认为 0
+                attributes[key] = 0
+
+        # --- 处理 Abl (能力等级：技巧、顺从等) ---
+        # 1. 获取源数据 (兼容多种写法：能力/ABL)
+        source_abl = raw_data.get('能力') or raw_data.get('ABL') or {}
+        
+        # 2. 遍历全局定义
+        for key in abl_template.keys():
+            if key in source_abl:
                 try:
-                    attributes[k] = int(v)
+                    # [校准] 等级初始化为 CSV 中的设定值
+                    attributes[key] = int(source_abl[key])
                 except ValueError:
-                    attributes[k] = 0
+                    attributes[key] = 0
+            else:
+                attributes[key] = 0
         
         char_state['attributes'] = attributes
 
-        # 4. CFLAG 系统
-        cflags = {}
+        # 4. [核心修改] 经验 (Exp)
+        # 使用模板补全，防止 KeyError
+        exps = exp_template.copy()
+        source_exp = raw_data.get('经验') or raw_data.get('EXP') or {}
+        for k, v in source_exp.items():
+            try: exps[k] = int(v)
+            except: pass
+        char_state['exp'] = exps
+
+        # 5. [核心修改] 绝顶/EX (Ex)
+        # 通常用于记录当前的绝顶次数或积累值
+        exs = ex_template.copy()
+        source_ex = raw_data.get('EX') or raw_data.get('绝顶') or {}
+        for k, v in source_ex.items():
+            try: exs[k] = int(v)
+            except: pass
+        char_state['ex'] = exs
+
+        # 6. 刻印 (Mark)
+        marks = mark_template.copy()
+        source_mark = raw_data.get('刻印') or raw_data.get('MARK') or {}
+        for k, v in source_mark.items():
+            try: marks[k] = int(v)
+            except: pass
+        char_state['mark'] = marks
+
+        # 7. CFLAG 系统同步
+        cflags = cflag_template.copy()
         if 'CFLAG' in raw_data:
             for k, v in raw_data['CFLAG'].items():
                 key = int(k) if k.isdigit() else k
@@ -63,117 +135,92 @@ def event_build_allstate(this):
                     cflags[key] = v
         char_state['cflags'] = cflags
 
-        # 5. 装备状态
-        char_state['equip'] = {
-            '上衣': raw_data.get('装备', {}).get('上衣', '无'),
-            '下衣': raw_data.get('装备', {}).get('下衣', '无'),
-            '内衣': raw_data.get('装备', {}).get('内衣', '无'),
-            '装饰': raw_data.get('装备', {}).get('装饰', '无'),
-        }
-
-        # 6. 特殊状态 (运行时)
-        char_state['states'] = {
-            '怀孕': 0,
-            '妊娠': 0,
-            '発情': 0,
-            '绝顶': 0,
-        }
-
-        loaded_images = this.console.chara_images.get(chara_id, {})
+        # 8. 装备状态
+        equip_state = {}
+        chara_init_equip = raw_data.get('装备') or raw_data.get('EQUIP') or {}
         
-        # 将字典的键转换为列表 (例如 ['初始绘', '泳装绘'])
-        available_types = list(loaded_images.keys())
-        
-        # 兜底：如果这人没图片，给个默认值
-        if not available_types:
-            available_types = ['初始绘']
+        for slot_id, slot_val in equip_slots_def.items():
+            slot_name = str(slot_val)
+            if isinstance(slot_val, dict):
+                slot_name = slot_val.get('name', str(slot_id))
             
-        # ----------------------------------------
+            item_id = str(chara_init_equip.get(str(slot_id), '0'))
+            item_name = "无"
+            if item_id != '0' and item_id in clothing_db:
+                item_data = clothing_db[item_id]
+                if isinstance(item_data, dict):
+                    item_name = item_data.get('name', '未知服装')
+                else:
+                    item_name = str(item_data)
+            
+            equip_state[str(slot_id)] = {
+                'slot_name': slot_name,
+                'item_id': item_id,
+                'item_name': item_name
+            }
+        char_state['equip'] = equip_state
+
+        # 9. 特殊状态 (运行时)
+        char_state['states'] = {'怀孕': 0, '妊娠': 0, '発情': 0, '绝顶': 0}
+
+        # 10. 立绘信息
+        loaded_images = this.console.chara_images.get(chara_id, {})
+        available_types = list(loaded_images.keys())
+        if not available_types: available_types = ['初始绘']
 
         draw_type = raw_data.get('draw_type')
-        # 校验：如果当前设定的类型不在已加载的列表里，重置为第一个可用的
-        # 这样能防止存档里记了"泳装"，但你删了图片包导致报错的情况
         if draw_type not in available_types:
             draw_type = available_types[0]
             raw_data['draw_type'] = draw_type
             
         default_face = '顔絵_服_通常' if draw_type == '初始绘' else '別顔_服_通常'
         face_name = raw_data.get('DrawName', default_face)
-        if not face_name: face_name = default_face # 双重保险
+        if not face_name: face_name = default_face
 
-        # 预先拼好图片 ID: 角色ID_类型_表情_角色ID
         full_img_key = f"{chara_id}_{draw_type}_{face_name}_{chara_id}"
 
         char_state['portrait'] = {
             'current_type': draw_type,
             'current_face': face_name,
-            'full_key': full_img_key, # 前端直接读这个就行
+            'full_key': full_img_key,
             'available': available_types, 
         }
-        # 8. [新增] 物品栏 (Inventory) - 竖线分隔版
-        # 支持格式: "1:5|2:1|3" (ID:数量 | ID:数量 | ID)
+
+        # 11. 物品栏
         inventory = {}
         raw_items = raw_data.get('物品栏')
-        
         if raw_items:
-            # 1. 统一转为字符串并清洗
-            # 无论 init.py 读成什么样，先转成字符串
             if isinstance(raw_items, list):
                 item_str = "".join(str(x) for x in raw_items)
             else:
                 item_str = str(raw_items)
             
-            # 去掉可能的方括号、引号和首尾空格
             clean_str = item_str.replace('[', '').replace(']', '').replace("'", "").replace('"', '').strip()
-            
             if clean_str:
-                # 2. 按 '|' 分割不同物品
-                # 如果用户还是用了逗号，这里做一个兼容替换
                 if '|' not in clean_str and ',' in clean_str:
                     clean_str = clean_str.replace(',', '|')
-                
-                item_groups = clean_str.split('|')
-                
-                for group in item_groups:
+                for group in clean_str.split('|'):
                     group = group.strip()
                     if not group: continue
-                    
-                    # 3. 解析 "ID:数量"
                     if ':' in group:
-                        # 格式: "2:5" -> ID=2, Count=5
                         parts = group.split(':')
                         item_id = parts[0].strip()
-                        try:
-                            count = int(parts[1].strip())
-                        except ValueError:
-                            count = 1
+                        try: count = int(parts[1].strip())
+                        except: count = 1
                     else:
-                        # 格式: "3" -> ID=3, Count=1 (默认)
                         item_id = group.strip()
                         count = 1
-                    
-                    # 4. 存入字典
                     if item_id:
-                        # 累加逻辑（防止写了两次 "1:1|1:2"）
                         inventory[item_id] = inventory.get(item_id, 0) + count
-        # 9. [新增] 位置历史记录
-        # 用于记录角色的行动轨迹，以及地牢回溯
-        # 格式: [{'大地图': '博丽神社', '小地图': '大殿','scene':'日常',如果有别的想加的后面再说}, ...]
-        # 这是一个运行时数据，不需要从 CSV 读，初始化为空列表即可
+        char_state['inventory'] = inventory
+
+        # 12. 历史
         char_state['location_history'] = []
-        # 存入角色状态
-        char_state['inventory'] = inventory
-        
-        # 存入角色状态
-        # 因为 allstate 会被存档，所以这里面的变动会自动保存
-        char_state['inventory'] = inventory
-        # 将构建好的单人状态存入总字典
+
         allstate[chara_id] = char_state
 
-    # 将 allstate 挂载到 console 上
     this.console.allstate = allstate
-    
-    # this.console.PRINT(f"已构建 {len(allstate)} 名角色的状态字典。", colors=(100, 255, 100))
+    print(allstate)
     return allstate
 
 def event_get_context_state(this):
