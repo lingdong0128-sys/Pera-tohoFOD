@@ -32,7 +32,7 @@
         "番号": "0",
         "名前": "你",
         "呼び名": "你",
-        "物品栏": "[1",
+        "物品栏": "[1:1|2:1|3:1]",
         "draw_type": "初始绘"
       },
       "talents": {
@@ -64,7 +64,10 @@
         ]
       },
       "inventory": {
-        "1": 1
+        "1": 1,
+        "2": 1,
+        "3": 1,
+        "1000": 1
       }
     },
     "1": {
@@ -22210,6 +22213,95 @@
         "1"
       ],
       "状态": "日常"
+    },
+    "DungeonInstance": {
+      "layer": 1,
+      "rooms": {
+        "room_0": {
+          "type_id": "0",
+          "exits": {
+            "前": "room_1"
+          },
+          "visited": true,
+          "looted": true,
+          "cleared": true
+        },
+        "room_1": {
+          "type_id": "0",
+          "exits": {
+            "后": "room_0",
+            "前": "room_2"
+          },
+          "cleared": true,
+          "visited": true
+        },
+        "room_2": {
+          "type_id": "1",
+          "exits": {
+            "后": "room_1",
+            "前": "room_3"
+          },
+          "cleared": true
+        },
+        "room_3": {
+          "type_id": "1",
+          "exits": {
+            "后": "room_2",
+            "前": "room_4"
+          },
+          "cleared": false
+        },
+        "room_4": {
+          "type_id": "4",
+          "exits": {
+            "后": "room_3",
+            "前": "room_5"
+          },
+          "cleared": false
+        },
+        "room_5": {
+          "type_id": "11",
+          "exits": {
+            "后": "room_4",
+            "前": "room_6"
+          },
+          "cleared": false
+        },
+        "room_6": {
+          "type_id": "11",
+          "exits": {
+            "后": "room_5",
+            "前": "room_7"
+          },
+          "cleared": false
+        },
+        "room_7": {
+          "type_id": "0",
+          "exits": {
+            "后": "room_6",
+            "前": "room_8"
+          },
+          "cleared": false
+        },
+        "room_8": {
+          "type_id": "0",
+          "exits": {
+            "后": "room_7",
+            "前": "room_9"
+          },
+          "cleared": false
+        },
+        "room_9": {
+          "type_id": "7",
+          "exits": {
+            "后": "room_8",
+            "前": null
+          },
+          "cleared": false
+        }
+      },
+      "entry_point": "room_0",
+      "created_at": "now"
     }
   },
   "session": {
@@ -22251,7 +22343,7 @@
       "番号": "0",
       "名前": "你",
       "呼び名": "你",
-      "物品栏": "[1",
+      "物品栏": "[1:1|2:1|3:1]",
       "draw_type": "初始绘"
     },
     "talents": {
@@ -22283,7 +22375,10 @@
       ]
     },
     "inventory": {
-      "1": 1
+      "1": 1,
+      "2": 1,
+      "3": 1,
+      "1000": 1
     }
   },
   "chara": {
@@ -22318,7 +22413,7 @@
       "番号": "0",
       "名前": "你",
       "呼び名": "你",
-      "物品栏": "[1",
+      "物品栏": "[1:1|2:1|3:1]",
       "draw_type": "初始绘"
     },
     "talents": {
@@ -22350,7 +22445,10 @@
       ]
     },
     "inventory": {
-      "1": 1
+      "1": 1,
+      "2": 1,
+      "3": 1,
+      "1000": 1
     }
   },
   "globals": {
@@ -22376,7 +22474,7 @@
     ]
   },
   "_metadata": {
-    "save_time": "2025-12-18 14:00:52",
+    "save_time": "2025-12-18 14:43:25",
     "location": "未知",
     "summary": "你 & 你 @ 未知",
     "version": "1.0"

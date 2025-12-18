@@ -110,7 +110,7 @@ def event_build_allstate(this):
             'full_key': full_img_key, # 前端直接读这个就行
             'available': available_types, 
         }
-# 8. [新增] 物品栏 (Inventory) - 竖线分隔版
+        # 8. [新增] 物品栏 (Inventory) - 竖线分隔版
         # 支持格式: "1:5|2:1|3" (ID:数量 | ID:数量 | ID)
         inventory = {}
         raw_items = raw_data.get('物品栏')
@@ -156,7 +156,11 @@ def event_build_allstate(this):
                     if item_id:
                         # 累加逻辑（防止写了两次 "1:1|1:2"）
                         inventory[item_id] = inventory.get(item_id, 0) + count
-        
+        # 9. [新增] 位置历史记录
+        # 用于记录角色的行动轨迹，以及地牢回溯
+        # 格式: [{'大地图': '博丽神社', '小地图': '大殿','scene':'日常',如果有别的想加的后面再说}, ...]
+        # 这是一个运行时数据，不需要从 CSV 读，初始化为空列表即可
+        char_state['location_history'] = []
         # 存入角色状态
         char_state['inventory'] = inventory
         

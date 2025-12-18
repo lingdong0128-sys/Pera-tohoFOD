@@ -31,7 +31,7 @@ def event_start(this):
             running=False
         elif current_scene == '地牢':
             # 执行地图逻辑完全独立的地牢
-            event_handle_dungeon_crawling(this, ctx)
+            handle_dungeon_crawling(this)
             running=False
         elif current_scene == '战斗':
              # 如果以后做回合制战斗，也可以分流到这里
@@ -139,12 +139,11 @@ def handle_daily_routine(this, ctx):
             elif input == '200':
                 this.event_manager.trigger_event('bad_apple', this)
             this.console.PRINT("")
-def event_handle_dungeon_crawling(this, ctx=None):
+def handle_dungeon_crawling(this):
     """地牢模式主循环 - 修复版"""
     
     # 1. 检查/初始化地牢数据
     map_data = getattr(this.console, 'map_data', {})
-    
     if 'DungeonInstance' not in map_data:
         this.console.PRINT("正在生成异变空间结构...", colors=(100, 255, 100))
         new_dungeon = this.event_manager.trigger_event('generate_dungeon', this)
@@ -166,7 +165,12 @@ def event_handle_dungeon_crawling(this, ctx=None):
         # 获取位置
         current_room_id = this.charater_pwds['0'].get('地牢位置', 'room_0')
         room_data = rooms.get(current_room_id)
-        
+        ctx = this.event_manager.trigger_event('get_context_state', this)
+        current_scene = ctx['session']['scene_type']
+        # 检查是否应该还在地牢 (处理外部强制传送出地牢的情况)
+        if ctx['session']['scene_type'] != '地牢':
+            crawling = False
+            break
         if not room_data:
             this.console.PRINT(f"错误：位置 {current_room_id} 无效，重置回入口。", colors=(255, 0, 0))
             this.charater_pwds['0']['地牢位置'] = dungeon['entry_point']
@@ -201,7 +205,7 @@ def event_handle_dungeon_crawling(this, ctx=None):
                 room_data['cleared'] = True
                 
                 # 如果事件导致场景切换（比如战败回家），退出循环
-                if this.console.init.global_key['System'].get('SCENE') != '地牢':
+                if current_scene != '地牢':
                     crawling = False
                     continue
 
@@ -244,7 +248,7 @@ def event_handle_dungeon_crawling(this, ctx=None):
                  crawling = False
         
         elif user_input == "I":
-            this.event_manager.trigger_event('menu_item', this)
+            this.event_manager.trigger_event('menu_inventory', this)
 event_start.event_id = "start"
 event_start.event_name = "开始"
 event_start.event_trigger = "0"

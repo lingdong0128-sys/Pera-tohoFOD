@@ -12,7 +12,7 @@ def event_初始之地(this):
     room_data = dungeon['rooms'].get(current_room_id, {})
     
     is_first_visit = not room_data.get('visited', False)
-    
+    context_state=this.event_manager.trigger_event('get_context_state', this)
     # 2. 设置界面氛围
     this.console.PRINT_DIVIDER("=")
     this.console.PRINT("【 异 变 的 起 点 】", colors=(255, 215, 0)) # 金色标题
@@ -75,9 +75,9 @@ def event_初始之地(this):
             this.console.PRINT("你靠在墙边坐下，平复了一下呼吸...")
             # 简单的恢复逻辑
             # 获取主角属性引用
-            master = this.console.allstate['MASTER']
-            current_hp = master['data']['基礎'].get('体力', 0)
-            max_hp = this.console.allstate['0']['data']['基礎'].get('体力', 2000) # 假设有最大值
+            master = context_state['master']
+            current_hp = int(master['data']['基礎'].get('体力', 0))
+            max_hp = int(this.console.allstate['0']['data']['基礎'].get('体力', 2000)) # 假设有最大值
             
             recover = 1000
             master['attributes']['体力'] = min(max_hp, current_hp + recover)
