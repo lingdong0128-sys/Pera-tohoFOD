@@ -45,10 +45,10 @@ class thethings:
                 "绿").set_color((0, 255, 0)) + cs("青").set_color((0, 255, 255)) + cs("蓝").set_color((0, 0, 255)) + cs("紫").set_color((127, 0, 255)))
             self.console.PRINT(gradient_text.click("gradient"))
             img_list = [
-                {'img': "167_言和绘_別立ち_服_通常_167"},
+                {'img': "167_言和绘_别力_服_通常_167"},
                 {'img': "167_言和绘_气泡_腮红_167"},
             ]
-            # 在输出图片时请在需要输出的图片名前加上角色id_，你可以直接输出在csv中的图片名
+            # 在输出图片时请在需要输出的图片全名加上角色id_，你可以直接输出在csv中的图片名
             self.console.PRINTIMG("", img_list=img_list)
             self.console.PRINT(
                 cs("嗯？你来啦？欢迎来到Pera的世界！这里是凌冬，这里演示的是图片调用").set_color((215, 200, 203)))

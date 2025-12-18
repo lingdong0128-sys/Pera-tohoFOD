@@ -143,21 +143,21 @@ def handle_daily_routine(this, ctx):
 
         # [状态栏] 玩家信息 (从 ctx 读取)
         m_attr = master_state.get('attributes', {})
-        m_base_raw = master_raw.get('基礎', {})
+        m_base_raw = master_raw.get('基础', {})
         
         m_hp = m_attr.get('体力', 0)
         m_hp_max = int(m_base_raw.get('体力', 1500))
-        m_mp = m_attr.get('気力', 0)
-        m_mp_max = int(m_base_raw.get('気力', 1000))
+        m_mp = m_attr.get('气力', 0)
+        m_mp_max = int(m_base_raw.get('气力', 1000))
         
         master_bars = get_ui_bar("【你】体力", m_hp, m_hp_max) + "    " + \
-                      get_ui_bar("気力", m_mp, m_mp_max)
+                      get_ui_bar("气力", m_mp, m_mp_max)
         this.console.PRINT(master_bars)
 
         # [状态栏] 目标信息 (排除自己)
         if target_state and target_state['id'] != '0':
             t_attr = target_state.get('attributes', {})
-            t_base_raw = target_raw.get('基礎', {})
+            t_base_raw = target_raw.get('基础', {})
             t_cflag = target_state.get('cflags', {})
             
             t_hp = t_attr.get('体力', 0)

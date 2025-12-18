@@ -44,7 +44,7 @@ def event_open_kojo_maker(this):
             if isinstance(val, dict):
                 # 兼容 {ID: {name: 'xxx'}} 格式
                 if 'name' in val: result_list.append(str(val['name']))
-                elif '名前' in val: result_list.append(str(val['名前']))
+                elif '全名' in val: result_list.append(str(val['全名']))
             else:
                 # 兼容 {ID: 'xxx'} 格式
                 result_list.append(str(val))
@@ -60,7 +60,7 @@ def event_open_kojo_maker(this):
     init.chara_ids=init.chara_ids if init.chara_ids else ['0']
     init.chara_name=[]
     for i in init.chara_ids:
-        init.chara_name.append(init.charaters_key[i].get('名前'))
+        init.chara_name.append(init.charaters_key[i].get('全名'))
     # 1. 准备元数据 (加入硬编码的默认值，防止下拉框为空)
     game_meta = {
         'ABL': get_data_list('Abl', ['C感觉', 'V感觉', 'A感觉', '技巧', '顺从', '欲望']),

@@ -165,7 +165,7 @@ class ERBConverterGUI:
             # 注意：这里加个容错，防止 kojo.MASTER 为空导致报错
             "master_name = '你'",
             "if kojo.MASTER:",
-            "    master_name = this.console.init.charaters_key.get(kojo.MASTER, {}).get('名前', '你')",
+            "    master_name = this.console.init.charaters_key.get(kojo.MASTER, {}).get('全名', '你')",
             "target_name = kojo.NAME",
             "call_name = kojo.CALLNAME", # 确保这一行也有
             "",

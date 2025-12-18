@@ -19,7 +19,7 @@ def event_build_allstate(this):
             # 获取属性名
             prop_name = str(val)
             if isinstance(val, dict):
-                prop_name = val.get('name') or val.get('名前') or str(key)
+                prop_name = val.get('name') or val.get('全名') or str(key)
             
             if prop_name:
                 template[str(prop_name)] = 0 # 默认值 0
@@ -45,16 +45,16 @@ def event_build_allstate(this):
         # 1. 基础信息
         char_state = {
             'id': chara_id,
-            'name': raw_data.get('名前', '未命名'),
-            'callname': raw_data.get('呼び名', raw_data.get('名前', '未命名')),
-            'fullname': raw_data.get('名前', ''), 
+            'name': raw_data.get('全名', '未命名'),
+            'callname': raw_data.get('小名', raw_data.get('全名', '未命名')),
+            'fullname': raw_data.get('全名', ''), 
             'data': raw_data, 
         }
 
         # 2. 才能 (Talent)
         talents = talent_template.copy()
-        if '素質' in raw_data:
-            for k, v in raw_data['素質'].items():
+        if '素质' in raw_data:
+            for k, v in raw_data['素质'].items():
                 try: talents[k] = int(v)
                 except: talents[k] = v 
         char_state['talents'] = talents
@@ -64,9 +64,9 @@ def event_build_allstate(this):
         attributes = {}
         
         # --- 处理 Base (基础数值：体力、气力等) ---
-        # 1. 获取源数据 (兼容多种写法：基礎/基础/BASE)
+        # 1. 获取源数据 (兼容多种写法：基础/基础/BASE)
         # 这一步非常关键，解决了"体力为0"的 Bug
-        source_base = raw_data.get('基礎') or raw_data.get('基础') or raw_data.get('BASE') or {}
+        source_base = raw_data.get('基础') or raw_data.get('基础') or raw_data.get('BASE') or {}
         
         # 2. 遍历全局定义的模板 (base_template 包含所有可能的属性名)
         for key in base_template.keys():
@@ -173,7 +173,7 @@ def event_build_allstate(this):
             draw_type = available_types[0]
             raw_data['draw_type'] = draw_type
             
-        default_face = '顔絵_服_通常' if draw_type == '初始绘' else '別顔_服_通常'
+        default_face = '顔絵_服_通常' if draw_type == '初始绘' else '别颜_服_通常'
         face_name = raw_data.get('DrawName', default_face)
         if not face_name: face_name = default_face
 

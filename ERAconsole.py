@@ -515,7 +515,7 @@ class SimpleERAConsole:
                             self.chara_images[chara_id][draw_type] = draw_image_list
 
                             chara_name = self.init.charaters_key.get(
-                                chara_id, {}).get('名前', f'角色{chara_id}')
+                                chara_id, {}).get('全名', f'角色{chara_id}')
                             self.PRINT(
                                 f"已加载角色立绘: {chara_name}({chara_id}) - {draw_type} - {len(draw_image_list)}张", colors=(200, 220, 255))
 
@@ -534,7 +534,7 @@ class SimpleERAConsole:
         self.PRINT("角色立绘统计:", colors=(200, 200, 255))
         for chara_id, draw_types in self.chara_images.items():
             chara_name = self.init.charaters_key.get(
-                chara_id, {}).get('名前', f'角色{chara_id}')
+                chara_id, {}).get('全名', f'角色{chara_id}')
             total_for_chara = sum(len(images)
                                   for images in draw_types.values())
             self.PRINT(
@@ -884,7 +884,7 @@ class SimpleERAConsole:
             self.loader.add_text("少女祈祷中...", (200, 255, 200))
 
             for i in init.charaters_key:
-                chara_name = init.charaters_key[i].get('名前', '未知角色')
+                chara_name = init.charaters_key[i].get('全名', '未知角色')
                 self.loader.add_text(f"已加载角色：{chara_name}", (200, 220, 255))
 
             time.sleep(1)

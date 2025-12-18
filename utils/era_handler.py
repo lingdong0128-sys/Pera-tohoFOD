@@ -151,7 +151,7 @@ class EraKojoHandler:
     def ABL(self): return EraDataProxy(self, '能力')
 
     @property
-    def TALENT(self): return EraDataProxy(self, '素質')
+    def TALENT(self): return EraDataProxy(self, '素质')
 
     @property
     def EXP(self): return EraDataProxy(self, '经验')  # 假设CSV里叫经验
@@ -168,12 +168,12 @@ class EraKojoHandler:
     def TCVAR(self): return EraDataProxy(self, 'TCVAR') # 如果你的CSV有这个分类
     @property
     def NAME(self):
-        return self.init.charaters_key.get(self.TARGET, {}).get('名前', 'Unknown')
+        return self.init.charaters_key.get(self.TARGET, {}).get('全名', 'Unknown')
     @property
     def EQUIP(self): return EraDataProxy(self, '装备') # 假设CSV里叫装备
     @property
     def CALLNAME(self):
-        return self.init.charaters_key.get(self.TARGET, {}).get('呼び名', self.NAME)
+        return self.init.charaters_key.get(self.TARGET, {}).get('小名', self.NAME)
 
     # 关系相性 (特殊处理，因为它是嵌套字典)
     def RELATION(self, target_chara_id):

@@ -51,7 +51,7 @@ def event_showme(things):
         
         # 显示每个角色的图片列表
         for chara_id, img_list in console.chara_images.items():
-            chara_name = console.init.charaters_key.get(chara_id, {}).get('名前', f'角色{chara_id}')
+            chara_name = console.init.charaters_key.get(chara_id, {}).get('全名', f'角色{chara_id}')
             console.PRINT(f"角色 {chara_name}({chara_id}): {len(img_list)}张图片", (220, 200, 255))
             
             # 显示前10个图片引用名

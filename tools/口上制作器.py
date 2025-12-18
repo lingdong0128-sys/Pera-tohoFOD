@@ -806,7 +806,7 @@ class KojoEditorApp:
             lines.append("    # --- 常用变量定义 ---")
             lines.append("    master_name = '你'")
             lines.append("    if kojo.MASTER:")
-            lines.append("        master_name = this.console.init.charaters_key.get(kojo.MASTER, {}).get('名前', '你')")
+            lines.append("        master_name = this.console.init.charaters_key.get(kojo.MASTER, {}).get('全名', '你')")
             lines.append("    target_name = kojo.NAME")
             lines.append("    call_name = kojo.CALLNAME")
             lines.append("    # --------------------")

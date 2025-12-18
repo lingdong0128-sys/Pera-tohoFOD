@@ -3,7 +3,7 @@ def event_getpwd(this, id='0'):
     if id in this.charater_pwds:
         mypwd = this.charater_pwds[id]
         
-        this.console.PRINT(f"{this.console.init.charaters_key[id].get('名前')}当前位置....")
+        this.console.PRINT(f"{this.console.init.charaters_key[id].get('全名')}当前位置....")
         this.console.PRINT(f"[{this.console.init.global_key['map'][mypwd['大地图']]}]" + f"[{this.console.init.global_key['map'][mypwd['小地图']]}]")
     else:
         this.console.PRINT(f"角色ID {id} 不存在", colors=(255, 200, 200))

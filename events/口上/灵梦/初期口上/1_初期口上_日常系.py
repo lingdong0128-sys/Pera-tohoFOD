@@ -16,7 +16,7 @@ def event_1_初期口上_初会面(this):
     master_id = kojo.MASTER
     # 注意：这里假设主角数据也在 charaters_key 中
     master_name = this.console.init.charaters_key.get(
-        master_id, {}).get('呼び名', '你')
+        master_id, {}).get('小名', '你')
 
     # 获取 CFLAG:31 的值
     # 注意：从 CSV 读出来通常是字符串，需要转 int

@@ -76,8 +76,8 @@ def event_初始之地(this):
             # 简单的恢复逻辑
             # 获取主角属性引用
             master = context_state['master']
-            current_hp = int(master['data']['基礎'].get('体力', 0))
-            max_hp = int(this.console.allstate['0']['data']['基礎'].get('体力', 2000)) # 假设有最大值
+            current_hp = int(master['data']['基础'].get('体力', 0))
+            max_hp = int(this.console.allstate['0']['data']['基础'].get('体力', 2000)) # 假设有最大值
             
             recover = 1000
             master['attributes']['体力'] = min(max_hp, current_hp + recover)

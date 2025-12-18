@@ -7,7 +7,7 @@ class initall:
         self.charaseting = []
         self.chara_ids = []
         self.charaters_key={}
-        self.keywords = ["基礎", "素質", "能力", "フラグ", "相性", "CSTR"]
+        self.keywords = ["基础", "素质", "能力", "CFLAG", "相性", "CSTR"]
         self.global_settings=[]
         self.globalid=[]
         self.global_key={}

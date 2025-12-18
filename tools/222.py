@@ -8,7 +8,7 @@ def event_1_初期_未命名(this):
     # --- 常用变量定义 ---
     master_name = '你'
     if kojo.MASTER:
-        master_name = this.console.init.charaters_key.get(kojo.MASTER, {}).get('名前', '你')
+        master_name = this.console.init.charaters_key.get(kojo.MASTER, {}).get('全名', '你')
     target_name = kojo.NAME
     call_name = kojo.CALLNAME
     # --------------------

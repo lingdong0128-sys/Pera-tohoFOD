@@ -32,7 +32,7 @@ def event_设置立绘类型选择(self):
             chara_info['draw_type'] = draw_types[0]
         else:
             # 有多个draw_type，询问用户选择哪一个
-            self.console.PRINT(f"角色 {chara_id} ({self.console.init.charaters_key[chara_id].get('名前', '未命名')}) 有多个立绘类型可选：")
+            self.console.PRINT(f"角色 {chara_id} ({self.console.init.charaters_key[chara_id].get('全名', '未命名')}) 有多个立绘类型可选：")
             
             # 显示选项
 
@@ -61,7 +61,7 @@ def event_设置立绘类型选择(self):
             self.console.PRINTIMG(random.choice(listimg))
             self.console.PRINT(f"[{i}] {self.console.init.charaters_key[i].get('draw_type')}",click=f'{i}')
         except KeyError:
-            self.console.PRINT(f"角色 {i} ({self.console.init.charaters_key[i].get('名前', '未命名')}) 不存在立绘文件或没有设置立绘类型")
+            self.console.PRINT(f"角色 {i} ({self.console.init.charaters_key[i].get('全名', '未命名')}) 不存在立绘文件或没有设置立绘类型")
     self.console.PRINT("所有角色的立绘类型已设置完成！")
     return self.console.init.charaters_key
 
