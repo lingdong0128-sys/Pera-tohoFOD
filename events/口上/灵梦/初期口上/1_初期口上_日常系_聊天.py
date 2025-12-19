@@ -1,6 +1,6 @@
 from utils.era_handler import EraKojoHandler
 
-def event_1_初期_未命名(this):
+def event_1_初期_日常_聊天(this):
     """ 默认差分 """
     context = getattr(this, 'current_kojo_context', {})
     kojo = EraKojoHandler(this.console, context)
@@ -16,16 +16,14 @@ def event_1_初期_未命名(this):
     COL_TALK = (255, 255, 255)
     COL_DESC = (170, 170, 170)
 
-    while True:
-        this.console.PRINT(this.cs("[1] Yes").click("1"), "   ", this.cs("[0] No").click("0"))
-        menu_res = this.console.INPUT()
-        if menu_res == "1":
-            pass
-            break
-        elif menu_res == "0":
-            pass
-            break
+    rand_1548923223360 = kojo.Rand(2)
+    if rand_1548923223360 == 0:
+        this.console.PRINT(f"{call_name}？怎么啦？", colors=COL_TALK)
+        this.console.INPUT()
+    elif rand_1548923223360 == 1:
+        this.console.PRINT(f"怎么啦？{call_name}？", colors=COL_TALK)
+        this.console.INPUT()
 
-event_1_初期_未命名.event_trigger = '1_初期_未命名'
+event_1_初期_日常_聊天.event_trigger = '1_初期_日常_聊天'
 
 # ----------------------------------------

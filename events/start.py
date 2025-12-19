@@ -32,7 +32,6 @@ def event_start(this):
         elif current_scene == '地牢':
             # 执行地图逻辑完全独立的地牢
             handle_dungeon_crawling(this)
-            running=False
         elif current_scene == '战斗':
              # 如果以后做回合制战斗，也可以分流到这里
              pass
@@ -60,7 +59,7 @@ def handle_daily_routine(this, ctx):
         elif percent > 0.2: color = (255, 255, 50)
         else: color = (255, 50, 50)
         
-        bar_text = "█" * filled_len
+        bar_text = "▒" * filled_len
         empty_text = "░" * (length - filled_len)
         
         return this.cs(f"{label} ").set_color((200, 200, 200)) + \
@@ -91,7 +90,7 @@ def handle_daily_routine(this, ctx):
         map_data = getattr(this.console, 'map_data', {})
         current_map_info = map_data.get(current_big_map_id, {})
         
-        if current_map_info.get('status') == 'corrupted':
+        if current_map_info.get('状态') == '腐化':
             this.console.PRINT(f"\n警告：[{current_big_map_id}] 已被异变吞噬！", colors=(255, 50, 50))
             this.console.PRINT("正在切入异变空间...", colors=(255, 100, 100))
             
@@ -218,36 +217,27 @@ def handle_daily_routine(this, ctx):
             elif input_val == '3':  this.event_manager.trigger_event('shop', this)
             elif input_val == '11': this.event_manager.trigger_event('menu_inventory', this)
             elif input_val == '4':  this.event_manager.trigger_event('music_control', this)
-            elif input_val == '12': this.event_manager.trigger_event('system_move', this)
+            elif input_val == '12': 
+                this.event_manager.trigger_event('移动菜单', this)
+                continue
             
             # --- 系统菜单 ---
             elif input_val == 'sys_menu':
-                this.console.PRINT("系统菜单:", colors=(100, 255, 255))
-                this.console.PRINT(
-                    this.cs("[20] 保存世界").click("20"), "    ", 
-                    this.cs("[21] 读取世界").click("21"), "    ",
-                    this.cs("[44] 重载事件").click("44")
-                )
-                continue 
-                
-            elif input_val == '20': this.event_manager.trigger_event('system_save', this)
-            elif input_val == '21': this.event_manager.trigger_event('system_load', this)
-            elif input_val == '44': this.event_manager.trigger_event('reload', this)
+                this.event_manager.trigger_event('系统菜单', this)
             
             elif input_val == '33': this.event_manager.trigger_event('water_demo', this)
             
             this.console.PRINT("")
 def handle_dungeon_crawling(this):
-    """地牢模式主循环 - 修复版"""
+    """地牢模式主循环 - 最终逻辑闭环版"""
     
-    # 1. 检查/初始化地牢数据
+    # 1. 检查/初始化地牢数据 (保持不变)
     map_data = getattr(this.console, 'map_data', {})
     if 'DungeonInstance' not in map_data:
         this.console.PRINT("正在生成异变空间结构...", colors=(100, 255, 100))
         new_dungeon = this.event_manager.trigger_event('generate_dungeon', this)
         if new_dungeon:
             this.console.map_data['DungeonInstance'] = new_dungeon
-            # 初始化玩家位置
             this.charater_pwds['0']['地牢位置'] = new_dungeon['entry_point']
         else:
             this.console.PRINT("地牢生成失败，返回日常模式。", colors=(255, 0, 0))
@@ -263,18 +253,23 @@ def handle_dungeon_crawling(this):
         # 获取位置
         current_room_id = this.charater_pwds['0'].get('地牢位置', 'room_0')
         room_data = rooms.get(current_room_id)
+        
+        # [检查1] 外部强制切换检测
+        # 如果 ctx 或者底层数据变了，说明可能读档了，或者被某种机制踢出了
         ctx = this.event_manager.trigger_event('get_context_state', this)
-        current_scene = ctx['session']['scene_type']
-        # 检查是否应该还在地牢 (处理外部强制传送出地牢的情况)
         if ctx['session']['scene_type'] != '地牢':
+            # 如果状态不是地牢，但人还在地牢循环里，说明需要执行撤离逻辑
+            perform_dungeon_exit(this)
             crawling = False
             break
-        if not room_data:
-            this.console.PRINT(f"错误：位置 {current_room_id} 无效，重置回入口。", colors=(255, 0, 0))
-            this.charater_pwds['0']['地牢位置'] = dungeon['entry_point']
-            continue
 
-        # 获取房间定义 (列表)
+        if not room_data:
+            this.console.PRINT(f"错误：位置 {current_room_id} 无效，紧急撤离。", colors=(255, 0, 0))
+            perform_dungeon_exit(this)
+            crawling = False
+            break
+
+        # 获取房间定义 (保持不变)
         type_id = room_data['type_id']
         room_def_list = this.console.init.global_key['DungeonRooms'].get(type_id)
         
@@ -282,32 +277,31 @@ def handle_dungeon_crawling(this):
             this.console.PRINT(f"错误：房间定义丢失 (ID: {type_id})")
             return
 
-        # [核心修复] 使用索引读取 CSV 列表数据 (去除空格)
-        room_name = room_def_list[0].strip()   # Name
-        room_event = room_def_list[1].strip()  # Event
-        # room_music = room_def_list[4].strip() # Music (如果有)
-        room_desc = room_def_list[5].strip()   # Desc
+        room_name = room_def_list[0].strip()
+        room_event = room_def_list[1].strip()
+        room_desc = room_def_list[5].strip()
 
         # --- 触发房间事件 ---
-        # 逻辑：如果事件存在，且房间未清理，则触发
         if room_event and room_event != 'None' and room_event != '':
             if not room_data.get('cleared'):
                 this.console.PRINT_DIVIDER("!")
-                # 触发事件
+                
+                # 触发事件 (比如战斗、陷阱)
                 this.event_manager.trigger_event(room_event, this)
                 
-                # [关键] 标记为已清理，防止死循环触发
-                # 注意：如果像"初始之地"这种需要反复进入的，
-                # 事件内部应该处理好循环，或者这里的逻辑需要改为"每次都触发"
-                # 对于大多数房间（战斗/宝箱），触发一次就够了
+                # 标记清理
                 room_data['cleared'] = True
                 
-                # 如果事件导致场景切换（比如战败回家），退出循环
+                # [核心逻辑] 事件后检查：是否导致了场景切换？
+                # 比如：战斗失败被送回家，或者使用了"逃脱绳"道具
+                current_scene = this.console.init.global_key['System'].get('SCENE')
                 if current_scene != '地牢':
+                    # 事件已经修改了 SCENE，我们只需要确保坐标正确
+                    perform_dungeon_exit(this) 
                     crawling = False
-                    continue
+                    continue # 退出循环
 
-        # --- 显示界面 (移动模式) ---
+        # --- 显示界面 (保持不变) ---
         this.console.PRINT_DIVIDER("-")
         this.console.PRINT(f"【{room_name}】 (区域: {current_room_id})", colors=(255, 200, 0))
         this.console.PRINT(room_desc)
@@ -341,12 +335,46 @@ def handle_dungeon_crawling(this):
             
         elif user_input == "Q":
             this.console.PRINT("确定要放弃探索吗？(y/n)", colors=(255, 0, 0))
-            if this.console.INPUT() == "y":
-                 this.console.init.global_key['System']['SCENE'] = '日常'
+            if this.console.INPUT().lower() == "y":
+                 # [修改] 调用通用撤离函数
+                 perform_dungeon_exit(this)
                  crawling = False
         
         elif user_input == "I":
             this.event_manager.trigger_event('menu_inventory', this)
+# [新增] 辅助函数：安全撤离地牢
+def perform_dungeon_exit(this):
+    """
+    执行从地牢返回日常的逻辑：
+    1. 读取历史记录，找到最近的安全地点
+    2. 移动角色
+    3. 切换场景状态
+    """
+    master_state = this.console.allstate.get('0', {})
+    history = master_state.get('location_history', [])
+    
+    # 默认保底位置 (防止没有历史记录)
+    target_big = '博丽神社' 
+    target_small = '大殿'
+    
+    # 倒序查找最近的一个"日常"位置
+    for entry in reversed(history):
+        if entry.get('scene') == '日常':
+            target_big = entry.get('map')
+            target_small = entry.get('submap')
+            break
+            
+    # 执行移动 (修改坐标)
+    this.charater_pwds['0'] = {
+        '大地图': target_big,
+        '小地图': target_small
+    }
+    
+    # 确保状态切换为日常
+    this.console.init.global_key['System']['SCENE'] = '日常'
+    
+    this.console.PRINT(f"脱离了异变区域，返回到了 {target_big}。", colors=(100, 255, 255))
+    this.console.INPUT()
 event_start.event_id = "start"
 event_start.event_name = "开始"
 event_start.event_trigger = "0"

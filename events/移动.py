@@ -92,30 +92,47 @@ def event_移动菜单(this):
 
 def event_强制移动(this, chara_id, big_map, small_map):
     """
-    [工具函数] 执行强制移动
-    可以在任何事件代码中直接调用此函数
+    [工具函数] 执行强制移动 (带历史记录)
     """
-    # 1. 验证目标是否存在 (可选)
-    # map_data = this.console.map_data
-    # if big_map not in map_data or small_map not in map_data[big_map]: ...
-    
-    # 2. 更新位置
+    # 0. 获取角色状态引用
+    chara_state = this.console.allstate.get(chara_id)
+    if not chara_state: return
+
+    # 1. 记录历史 (Record History)
+    # 获取移动前的位置 (Current/Old Position)
+    old_big = this.charater_pwds.get(chara_id, {}).get('大地图')
+    old_small = this.charater_pwds.get(chara_id, {}).get('小地图')
+
+    # 只有当位置真的发生变化，且当前位置有效时才记录
+    if old_big and old_small and (old_big != big_map or old_small != small_map):
+        # 确保 location_history 列表存在
+        if 'location_history' not in chara_state:
+            chara_state['location_history'] = []
+            
+        history = chara_state['location_history']
+        
+        # 记录条目
+        entry = {
+            'map': old_big,
+            'submap': old_small,
+            'scene': this.console.init.global_key['System'].get('SCENE', '日常')
+        }
+        
+        # 追加并限制长度 (只记最近50步)
+        history.append(entry)
+        if len(history) > 50:
+            history.pop(0)
+
+    # 2. 更新位置 (Update Position)
     this.charater_pwds[chara_id] = {
         '大地图': big_map,
         '小地图': small_map
     }
     
-    # 3. 如果是主角，打印提示
+    # 3. 提示与后续处理
     if chara_id == '0':
         this.console.PRINT(f"你移动到了 {big_map} - {small_map}。", colors=(100, 255, 100))
-        
-        # 4. (可选) 这里可以处理场景切换逻辑
-        # 比如如果移动到了 '被腐化' 的区域，自动切入地牢模式
-        map_info = this.console.map_data.get(big_map, {})
-        if map_info.get('状态') == '腐化':
-            # 触发进入地牢事件
-            this.event_manager.trigger_event('handle_dungeon_crawling',this)
-            pass
+        # 场景切换检测会在 start.py 的主循环开头自动触发
 
 # 注册事件
 event_移动菜单.event_trigger = "system_move"

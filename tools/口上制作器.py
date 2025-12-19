@@ -61,6 +61,7 @@ class KojoEditorApp:
         self.menu_add = Menu(self.context_menu, tearoff=0)
         self.menu_add.add_command(label="🔷 分支判断 (IF)", command=self.add_branch)
         self.menu_add.add_command(label="🔘 选项菜单 (MENU)", command=self.add_menu_node)
+        self.menu_add.add_command(label="🎲 随机分支 (RAND)", command=self.add_rand_node)
         self.menu_add.add_command(label="✏️ 修改属性 (SET)", command=self.add_set_node)
         self.menu_add.add_separator()
         self.menu_add.add_command(label="💬 文本 (PRINT)", command=self.add_text_node)
@@ -122,7 +123,14 @@ class KojoEditorApp:
             display_text = f"🔘 [MENU]"
         elif node_data['type'] == 'menu_case':
             display_text = f"↳ 选中 [{node_data.get('value')}]"
-            
+        elif node_data['type'] == 'rand':
+            rng = node_data.get('range', '2')
+            display_text = f"🎲 [RAND] 1/{rng}"
+            tags = ('rand',)
+        elif node_data['type'] == 'rand_case':
+            val = node_data.get('value', '?')
+            display_text = f"↳ 结果 [{val}]"
+            tags = ('rand_case',)
         # 插入节点
         item_id = self.tree_widget.insert(parent_id, 'end', text=display_text, tags=tags)
         self.node_map[item_id] = node_data
@@ -168,7 +176,7 @@ class KojoEditorApp:
             # [核心约束] 只有容器节点才能添加子节点
             # 容器类型：root, branch, menu_case
             # 叶子类型：text, image, call, set, menu(menu比较特殊，它的子节点是自动生成的)
-            is_container = node['type'] in ['root', 'branch', 'menu_case']
+            is_container = ['root', 'branch', 'menu_case', 'rand_case']
             
             # 动态启用/禁用菜单项
             if is_container:
@@ -181,13 +189,37 @@ class KojoEditorApp:
             self.context_menu.post(event.x_root, event.y_root)
 
     # ================= 节点操作 (增删改) =================
+    def add_rand_node(self):
+        """添加一个随机分支节点"""
+        parent, ui_id = self.get_selected_node()
+        if not parent: return
+        
+        # 默认创建范围为 2 的随机 (0, 1)
+        new_node = {
+            'type': 'rand',
+            'name': '随机事件',
+            'range': '2',
+            'variable': 'rand_res', # 临时变量名
+            'children': []
+        }
+        
+        # 自动生成子节点 (Case)
+        for i in range(2):
+            case_node = {
+                'type': 'rand_case', 
+                'name': f"当随机到 [{i}] 时", 
+                'value': str(i),
+                'children': []
+            }
+            new_node['children'].append(case_node)
 
+        self.add_child_node(new_node)
     def add_child_node(self, new_node):
         parent, ui_id = self.get_selected_node()
         if not parent: return
         
         # [双重保险] 再次检查类型
-        if parent['type'] not in ['root', 'branch', 'menu_case']:
+        if parent['type'] not in ['root', 'branch', 'menu_case', 'rand_case']:
             messagebox.showwarning("操作无效", "该节点类型不支持添加子节点！")
             return
         
@@ -321,7 +353,26 @@ class KojoEditorApp:
             var = node.get('var_name', '??')
             title_text = f"✏️ 属性修改: {var}"
             title_bg = "#fff3e0" # 淡橙
+        elif node['type'] == 'rand':
+            tk.Label(self.frame_right, text="[随机分支设置]", font=('bold', 12)).pack(pady=5)
+            
+            frame_rand = tk.Frame(self.frame_right)
+            frame_rand.pack(fill=tk.X, padx=5, pady=10)
+            
+            tk.Label(frame_rand, text="随机范围 (0 ~ N-1):").pack(side=tk.LEFT)
+            self.entry_range = tk.Entry(frame_rand, width=5)
+            self.entry_range.insert(0, node.get('range', '2'))
+            self.entry_range.pack(side=tk.LEFT, padx=5)
+            
+            tk.Button(self.frame_right, text="重置并生成分支", 
+                      command=lambda: self.update_rand_branches(node),
+                      bg="#ffecb3").pack(pady=10)
+            
+            tk.Label(self.frame_right, text="⚠️ 点击生成会覆盖当前的子分支！", fg="red").pack()
 
+        elif node['type'] == 'rand_case':
+            tk.Label(self.frame_right, text="这是自动生成的随机结果分支", fg="gray").pack(pady=20)
+            tk.Label(self.frame_right, text=f"当随机数为 {node.get('value')} 时执行").pack()
         # 渲染优化后的标题栏
         header_frame = tk.Frame(self.frame_right, bg=title_bg, pady=5, padx=5)
         header_frame.pack(fill=tk.X, pady=(0, 10))
@@ -608,7 +659,29 @@ class KojoEditorApp:
         if hasattr(self, 'txt_content'):
             self.txt_content.insert(tk.INSERT, tag)
             self.txt_content.focus_set()
-
+    def update_rand_branches(self, node):
+        """根据输入的范围重新生成子分支"""
+        try:
+            rng = int(self.entry_range.get())
+            if rng < 1: raise ValueError
+            
+            if messagebox.askyesno("确认", "这将清空当前随机分支下的所有内容，确定吗？"):
+                node['range'] = str(rng)
+                node['children'] = [] # 清空旧的
+                
+                for i in range(rng):
+                    node['children'].append({
+                        'type': 'rand_case',
+                        'name': f"当随机到 [{i}] 时",
+                        'value': str(i),
+                        'children': []
+                    })
+                
+                self.refresh_tree_view()
+                messagebox.showinfo("成功", f"已生成 {rng} 个随机分支")
+                
+        except ValueError:
+            messagebox.showerror("错误", "请输入有效的正整数！")
     def update_var_names(self, event, initial_value=None):
         v_type = self.cmb_var_type.get()
         
@@ -848,7 +921,12 @@ class KojoEditorApp:
                 else:
                     lines.append(f"{prefix}    pass")
             elif node['type'] == 'menu':
-                # 1. 生成显示代码
+                # 1. 生成循环头
+                lines.append(f'{prefix}while True:')
+                indent_inner = indent + 1
+                prefix_inner = "    " * indent_inner
+                
+                # 2. 生成显示代码 (在循环内)
                 menu_code_parts = []
                 for opt in node.get('options', []):
                     label = opt['label']
@@ -857,26 +935,58 @@ class KojoEditorApp:
                     menu_code_parts.append(f'this.cs("{btn_text}").click("{val}")')
                 
                 menu_args = ', "   ", '.join(menu_code_parts)
-                lines.append(f'{prefix}this.console.PRINT({menu_args})')
+                lines.append(f'{prefix_inner}this.console.PRINT({menu_args})')
                 
-                # 2. 生成输入代码
-                var_name = "menu_res" # 临时变量名
-                lines.append(f'{prefix}{var_name} = this.console.INPUT()')
+                # 添加一个默认的退出选项 (防止死循环)
+                # lines.append(f'{prefix_inner}this.console.PRINT(this.cs("[999] 返回").click("999"))')
                 
-                # 3. 生成分支逻辑
+                # 3. 生成输入代码
+                var_name = "menu_res" 
+                lines.append(f'{prefix_inner}{var_name} = this.console.INPUT()')
+                
+                # 4. 生成分支逻辑
+                first_branch = True
                 for i, child in enumerate(node.get('children', [])):
                     val = child.get('value', '')
-                    if i == 0:
-                        lines.append(f'{prefix}if {var_name} == "{val}":')
+                    
+                    # if / elif 结构
+                    if first_branch:
+                        lines.append(f'{prefix_inner}if {var_name} == "{val}":')
+                        first_branch = False
                     else:
-                        lines.append(f'{prefix}elif {var_name} == "{val}":')
+                        lines.append(f'{prefix_inner}elif {var_name} == "{val}":')
+                    
+                    # 递归编译子节点
+                    if 'children' in child and child['children']:
+                        for grand_child in child['children']:
+                            self._compile_node(grand_child, lines, indent_inner + 1)
+                    else:
+                        lines.append(f'{prefix_inner}    pass')
+                    
+                    # [关键] 默认行为：执行完分支后退出菜单？还是继续？
+                    # 通常作为"选项"，选完就该继续剧情了，所以默认 break
+                    lines.append(f'{prefix_inner}    break') 
+            elif node['type'] == 'rand':
+                rng = node.get('range', '2')
+                var_name = f"rand_{id(node)}" # 使用唯一ID防止变量冲突
+                
+                # 1. 生成随机数代码
+                lines.append(f"{prefix}{var_name} = kojo.Rand({rng})")
+                
+                # 2. 生成分支逻辑
+                for i, child in enumerate(node.get('children', [])):
+                    val = child.get('value', '0')
+                    
+                    if i == 0:
+                        lines.append(f"{prefix}if {var_name} == {val}:")
+                    else:
+                        lines.append(f"{prefix}elif {var_name} == {val}:")
                     
                     if 'children' in child and child['children']:
                         for grand_child in child['children']:
                             self._compile_node(grand_child, lines, indent + 1)
                     else:
-                        lines.append(f'{prefix}    pass')
-                        
+                        lines.append(f"{prefix}    pass")
             elif node['type'] == 'text':
                 color = node.get('color', 'COL_TALK')
                 content_raw = node.get('content', '')
@@ -948,7 +1058,25 @@ class KojoEditorApp:
                 messagebox.showerror("错误", f"读取失败: {e}")
 
 if __name__ == "__main__":
+    import sys
+    import os
+    
     root = tk.Tk()
+    
+    # 默认元数据 (用于直接双击运行测试)
     meta = {'ABL': ['C感觉'], 'CHARAS': ['0'], 'IMAGES': []}
+    
+    # [核心修改] 读取命令行参数传入的 JSON 文件
+    if len(sys.argv) > 1:
+        json_path = sys.argv[1]
+        if os.path.exists(json_path):
+            try:
+                with open(json_path, 'r', encoding='utf-8') as f:
+                    meta = json.load(f)
+                # 读取后可以删除临时文件，也可以留着调试
+                # os.remove(json_path) 
+            except Exception as e:
+                messagebox.showerror("错误", f"元数据加载失败: {e}")
+    
     app = KojoEditorApp(root, meta)
     root.mainloop()
