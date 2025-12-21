@@ -33,15 +33,16 @@ def event_build_allstate(this):
     mark_template = create_template('Mark')
     cflag_template = create_template('Cflag') 
     ex_template = create_template('ex') # [新增] 对应 ex.csv
-
     # 获取装备定义
     equip_slots_def = init.global_key.get('Equip', {})
     clothing_db = init.global_key.get('Tequip', {})
+    # 获取地牢属性定义
+    dungeon_stat_template = create_template('角色地牢属性')
 
     # --- 遍历所有已注册的角色 ---
     for chara_id in init.chara_ids:
         raw_data = init.charaters_key.get(chara_id, {})
-        
+        print(raw_data)
         # 1. 基础信息
         char_state = {
             'id': chara_id,
@@ -216,11 +217,53 @@ def event_build_allstate(this):
 
         # 12. 历史
         char_state['location_history'] = []
+        # 13. 地牢角色属性
+        # 使用模板初始化
+        dungeon_stats = dungeon_stat_template.copy()
+        
+        # 尝试从 raw_data 中读取已有的地牢数据 (如果存档或初始化过)
+        source_dungeon = raw_data.get('角色地牢属性') or raw_data.get('DUNGEON') or {}
+        
+        if source_dungeon:
+            # 如果源数据有，直接加载
+            for k, v in source_dungeon.items():
+                if k in dungeon_stats:
+                    try: dungeon_stats[k] = int(v)
+                    except: dungeon_stats[k] = v
+        else:
+            # 如果源数据没有，执行初始化逻辑 (根据设计思路映射 Base)
+            # 逻辑：根据角色base中的体力上限等比映射
+            # 这里先做简单的初值填充，具体的等比逻辑建议在地牢初始化事件中动态计算
+            if '体力' in dungeon_stats and '体力' in attributes:
+                dungeon_stats['体力'] = attributes['体力'] # 初始同步
+            
+            # 设置默认行动力
+            if '行动力' in dungeon_stats:
+                dungeon_stats['行动力'] = 3
 
-        allstate[chara_id] = char_state
-
+        # 将构建好的字典放入 char_state 供实时操作
+        char_state['dungeon_stats'] = dungeon_stats
+        
+        # [需求实现] 确保数据结构在 data 键中有键值对存在
+        # 这将初始化的数据回写到 init.charaters_key 中
+        if '角色地牢属性' not in raw_data:
+            raw_data['角色地牢属性'] = dungeon_stats
+        # 14.异常状态
+        abnormal_states = {}
+        source_abnormal = raw_data.get('异常状态') or raw_data.get('ABNORMAL') or {}
+        
+        if source_abnormal:
+             for k, v in source_abnormal.items():
+                 abnormal_states[k] = v
+        
+        # 放入 char_state
+        char_state['abnormal_states'] = abnormal_states
+        
+        # [需求实现] 确保数据结构在 data 键中存在
+        if '异常状态' not in raw_data:
+            raw_data['异常状态'] = abnormal_states
+        allstate[chara_id]=char_state
     this.console.allstate = allstate
-    print(allstate)
     return allstate
 
 def event_get_context_state(this):

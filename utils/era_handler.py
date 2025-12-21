@@ -306,7 +306,23 @@ class EraKojoHandler:
 
     @property
     def SAVESTR(self): return self.init.global_key.get('SaveStr', {})
-
+    # ==========================
+    # 地牢相关
+    # ==========================
+    @property
+    def DUNGEON(self):
+        '''
+        角色属性相关
+        使用:kojo.DUNGEON.get('0')
+        '''
+        return EraDataProxy(self,'角色地牢属性')
+    @property
+    def ABNORMAL(self):
+        '''
+        异常属性
+        使用:kojo.ABNORMAL.get('虚弱')
+        '''
+        return EraDataProxy(self,'异常状态')
     # ==========================
     # 辅助功能
     # ==========================

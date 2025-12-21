@@ -1,7 +1,7 @@
 def event_初会面检查(this):
     # 1. 确保状态已构建
     if not getattr(this.console, 'allstate', None):
-        this.event_manager.trigger_event('build_state', this)
+        this.event_manager.trigger_event('build_allstate', this)
         
     # 2. 调用对象选择获取当前地图的角色
     result = this.event_manager.trigger_event('对象选择', this)

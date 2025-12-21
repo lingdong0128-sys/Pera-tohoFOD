@@ -24,12 +24,12 @@ def event_系统菜单(this):
             break # 退出系统菜单循环
             
         elif sys_input == '20':
-            this.event_manager.trigger_event('system_save', this)
+            this.event_manager.trigger_event('save_menu', this)
             
         elif sys_input == '21':
             # 读档后通常需要直接跳出所有循环，重新加载
             # 但这里我们先做简单处理
-            this.event_manager.trigger_event('system_load', this)
+            this.event_manager.trigger_event('load_menu', this)
             break # 读档后退出菜单
             
         elif sys_input == '44':

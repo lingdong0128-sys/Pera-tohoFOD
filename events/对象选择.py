@@ -3,7 +3,7 @@ def event_对象选择(this):
     # 使用 getattr + None 判断，兼容你初始化为 None 或 {} 的情况
     if not getattr(this.console, 'allstate', None):
         # 如果没有状态，先构建 (懒加载)
-        this.event_manager.trigger_event('build_state', this)
+        this.event_manager.trigger_event('build_allstate', this)
 
     # 快捷引用
     all_states = this.console.allstate

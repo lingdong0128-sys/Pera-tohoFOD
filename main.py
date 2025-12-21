@@ -34,10 +34,10 @@ class thethings:
         self.main()
 
     def main(self):
-        # 首先初始化地图数据
-        self.console.PRINT("加载完成，回车以继续...")
+        
         self.event_manager.trigger_event('map', self)
         self.event_manager.trigger_event('build_allstate', self)
+        self.console.PRINT("加载完成，回车以继续...")
         running = True
         while running:
             self.input = self.console.INPUT()

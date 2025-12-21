@@ -1,5 +1,5 @@
 def event_start(this):
-    print(this.console.init.global_key['DungeonRooms'])
+    this.event_manager.trigger_event('init_data_adapters', this)
     # 这是一个示例，如果你们也有这种需要进入的循环的话请把每一个循环中需要使用的事件id加入这种列表中并初始化
     loadidlist = ['1', '2', '3', '4', '5', '99', '10', '8']
     # 当然这是作为机械加载文本位置的预备功能，现在这个列表还没什么用
