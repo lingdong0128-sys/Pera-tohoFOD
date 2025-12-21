@@ -308,6 +308,13 @@ def event_get_context_state(this):
             # 这里假设 global_key 里有这些变量，如果没有会返回默认值
             'scene_type': init.global_key.get('System', {}).get('SCENE', '日常'),
             'time_of_day': init.global_key.get('System', {}).get('TIME', '昼'),
+            #测试数据
+            'year': init.global_key.get('System', {}).get('YEAR', 2025),
+            'month': init.global_key.get('System', {}).get('MONTH', 1),
+            'day': init.global_key.get('System', {}).get('DAY', 1),
+            'weather': '晴', # 暂时写死，以后做天气系统
+            'temp': '20.5℃',
+            #测试数据
         },
 
         # --- 角色数据 (引用) ---

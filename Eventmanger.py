@@ -102,23 +102,40 @@ class EventManager:
             if is_reload:
                 self.console.PRINT(f"重载完成，当前共有 {len(self.events)} 个事件。", colors=(100, 255, 100))
 
-    def trigger_event(self, event_name, things_instance,silent=False):
+    def trigger_event(self, event_name, things_instance, *args, **kwargs):
+            """
+            触发指定事件 (支持任意参数传递)
+            :param event_name: 事件ID
+            :param things_instance: 主对象 (this)
+            :param args: 位置参数 (如: 1, "text")
+            :param kwargs: 关键字参数 (如: silent=True)
+            """
+            # 1. 提取特殊参数 'silent'
+            # 我们从 kwargs 里把 silent 拿出来，防止它被传给目标函数导致报错
+            # (除非目标函数里真的也定义了一个叫 silent 的参数，但通常不需要)
+            silent = kwargs.pop('silent', False)
+
             if event_name in self.events:
                 try:
                     # 记录调用栈
                     self.call_stack.append(event_name)
-                    return self.events[event_name](things_instance)
+                    
+                    # 2. [核心修改] 将参数解包传递给目标函数
+                    # things_instance 是第一个参数，后面跟着 args 和 kwargs
+                    return self.events[event_name](things_instance, *args, **kwargs)
+                    
                 except Exception as e:
-                    # [关键] 打印详细堆栈，而不是简单的“未找到”
                     import traceback
                     error_msg = traceback.format_exc()
-                    print(f"❌ 事件 [{event_name}] 运行崩溃:\n{error_msg}") # 打印到终端
-                    self.console.PRINT(f"事件运行出错: {e}", colors=(255, 0, 0)) # 打印到游戏
+                    print(f"❌ 事件 [{event_name}] 运行崩溃:\n{error_msg}")
+                    
+                    # 只有非静默模式才在游戏内打印报错
+                    if not silent:
+                        self.console.PRINT(f"事件运行出错: {e}", colors=(255, 0, 0))
                     return None
                 finally:
                     if self.call_stack: self.call_stack.pop()
             else:
-                # 只有真的不在字典里，才报未找到
                 if not silent:
                     self.console.PRINT(f"未找到事件: {event_name}", colors=(255, 100, 100))
                 return None

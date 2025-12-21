@@ -34,7 +34,6 @@ class thethings:
         self.main()
 
     def main(self):
-        
         self.event_manager.trigger_event('map', self)
         self.event_manager.trigger_event('build_allstate', self)
         self.console.PRINT("加载完成，回车以继续...")
