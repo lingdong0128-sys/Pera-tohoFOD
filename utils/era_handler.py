@@ -173,7 +173,7 @@ class EraKojoHandler:
     def EQUIP(self): return EraDataProxy(self, '装备') # 假设CSV里叫装备
     @property
     def CALLNAME(self):
-        return self.init.charaters_key.get(self.TARGET, {}).get('小名', self.NAME)
+        return self.init.charaters_key.get(self.TARGET, {}).get('称呼', self.NAME)
 
     # 关系相性 (特殊处理，因为它是嵌套字典)
     def RELATION(self, target_chara_id):

@@ -47,7 +47,7 @@ def event_build_allstate(this):
         char_state = {
             'id': chara_id,
             'name': raw_data.get('全名', '未命名'),
-            'callname': raw_data.get('小名', raw_data.get('全名', '未命名')),
+            'callname': raw_data.get('称呼', raw_data.get('全名', '未命名')),
             'fullname': raw_data.get('全名', ''), 
             'data': raw_data, 
         }

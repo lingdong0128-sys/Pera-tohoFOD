@@ -30,7 +30,7 @@ def event_open_kojo_maker(this):
         for val in target_data.values():
             if isinstance(val, dict):
                 if 'name' in val: result_list.append(str(val['name']))
-                elif '名前' in val: result_list.append(str(val['名前']))
+                elif '全名' in val: result_list.append(str(val['全名']))
             else:
                 result_list.append(str(val))
         return list(result_list)
@@ -46,7 +46,7 @@ def event_open_kojo_maker(this):
     chara_names = []
     if init.chara_ids:
         for i in init.chara_ids:
-            name = init.charaters_key[i].get('名前', i)
+            name = init.charaters_key[i].get('全名', i)
             chara_names.append(name)
     else:
         chara_names = ['0']
