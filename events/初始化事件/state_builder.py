@@ -308,13 +308,17 @@ def event_get_context_state(this):
             # 这里假设 global_key 里有这些变量，如果没有会返回默认值
             'scene_type': init.global_key.get('System', {}).get('SCENE', '日常'),
             'time_of_day': init.global_key.get('System', {}).get('TIME', '昼'),
-            #测试数据
-            'year': init.global_key.get('System', {}).get('YEAR', 2025),
+            # 时间系统数据（从全局System中读取）
+            'year': init.global_key.get('System', {}).get('YEAR', 1),
             'month': init.global_key.get('System', {}).get('MONTH', 1),
             'day': init.global_key.get('System', {}).get('DAY', 1),
+            'hour': init.global_key.get('System', {}).get('HOUR', 0),
+            'minute': init.global_key.get('System', {}).get('MINUTE', 0),
+            'weekday': init.global_key.get('System', {}).get('WEEKDAY', 1),
+            'total_minutes': init.global_key.get('System', {}).get('TOTAL_MINUTES', 0),
+            'current_festival': init.global_key.get('System', {}).get('CURRENT_FESTIVAL', None),
             'weather': '晴', # 暂时写死，以后做天气系统
             'temp': '20.5℃',
-            #测试数据
         },
 
         # --- 角色数据 (引用) ---
@@ -413,6 +417,12 @@ def event_apply_save_data(this):
         new_ctx['chara'] = loaded_allstate.get(chara_id, {})
 
         this.console.PRINT(">>> 数据流重定向完成 (Save -> Allstate -> Init)", colors=(100, 255, 100))
+    
+    # ---------------------------------------------------------
+    # 核心步骤 D: 恢复时间系统
+    # ---------------------------------------------------------
+    # 从全局变量加载时间状态到时间管理器
+    this.event_manager.trigger_event('time_control', this, 'load_from_global')
 
     # ---------------------------------------------------------
     # 核心步骤 C: 恢复其他 Session 信息

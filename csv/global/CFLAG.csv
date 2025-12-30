@@ -257,8 +257,8 @@
 652,睡衣胖次
 653,指定胖次
 
-655,套装,;お気入り衣装を設定したかどうか、送り仮名がややこしいのでひらがなにします
-656,衣装一時変更,;これ立っているときは服を脱がす指令を実行するまで便装に戻らない
+655,套装;お気入り衣装を設定したかどうか、送り仮名がややこしいのでひらがなにします
+656,衣装一時変更;これ立っているときは服を脱がす指令を実行するまで便装に戻らない
 
 ;今日内衣
 661,きょうのブラ
@@ -277,7 +277,7 @@
 ;MOVE TO DIM.ERH
 899,膣内精液
 
-900,生理周期,;7で危険日
+900,生理周期;7で危険日
 901,子宮内精子
 902,妊娠
 903,妊娠経過日数
@@ -321,7 +321,7 @@
 970,種付けられ自覚
 
 998,剧本选择
-999,剧本用继承值,;会在继承进行下一轮游戏时保留
+999,剧本用继承值;会在继承进行下一轮游戏时保留
 ;CFLAG:1000～1999	 口上用確保領域
 ;CFLAG:TARGET:(DADDY + 2000) 各角色受到某对象的子宮内射精量 (DADDY + 2000 結果區間預留為2000～2499)
 ;CFLAG:TARGET:(DADDY + 2500) 各角色受到某对象的累計射精量 (DADDY + 2500 結果區間預留為2500～2999)
@@ -331,8 +331,8 @@
 ;自定义使用域
 6000,大运蘑菇
 
-9112,口上用童貞喪失判定,;enables a subsection of M_KOJO_EVENT_KX_PERMISSION that lets dialogues have custom conditions where trying to take a character's penile virginity will succeed or fail
-9113,口上用アナル处女喪失判定,;same as above, but for anal virginity
+9112,口上用童貞喪失判定;enables a subsection of M_KOJO_EVENT_KX_PERMISSION that lets dialogues have custom conditions where trying to take a character's penile virginity will succeed or fail
+9113,口上用アナル处女喪失判定;same as above, but for anal virginity
 9116,RevServiceFilter
 9117,RevSexFilter
 9118,STANDING_TOGGLE
@@ -343,12 +343,12 @@
 9123,EXTENDED_TRAITS_SET
 9124,ALLOW_BATH
 
-9125,MORNING_TIPS,;does character have night tips, for authors
-9126,MORNING_TIPS_DISABLED,;are their night tips enabled in the settings
+9125,MORNING_TIPS;does character have night tips, for authors
+9126,MORNING_TIPS_DISABLED;are their night tips enabled in the settings
 9115,BUTT_SIZE_UPDATED
-9127,IS_DUPLICATE,;is a duplicated character
-9128,FAVORITE_OVERRIDE_UNDERWEAR,;overrides the underwear for the favorite outfit
-9129,WIFE_VISITATION,;wives and concubines will try to visit every day
+9127,IS_DUPLICATE;is a duplicated character
+9128,FAVORITE_OVERRIDE_UNDERWEAR;overrides the underwear for the favorite outfit
+9129,WIFE_VISITATION;wives and concubines will try to visit every day
 
 ;9130,PullOutPromiseDenied
 9131,EXTENDED_TRAITS_SET
