@@ -18,11 +18,11 @@ def call_kojo_with_fallback(this, kojo_context, event_name, fallback_event_name)
     this.current_kojo_context = kojo_context
     
     try:
-        result = this.event_manager.trigger_event(event_name, this)
+        # 使用静默模式调用特定角色口上，未找到时不报错
+        result = this.event_manager.trigger_event(event_name, this, silent=True)
         
         # 如果找不到事件，回退到通用口上
         if result is None:
-            this.console.PRINT(f"[调试] 未找到 {event_name}，回退到 {fallback_event_name}", colors=(150, 150, 150))
             this.event_manager.trigger_event(fallback_event_name, this)
             return False
         return True
