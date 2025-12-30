@@ -1,5 +1,23 @@
 from utils.era_handler import EraKojoHandler
 
+# 辅助函数：获取地图显示名称（ID-名称格式）
+def get_map_display_name(this, map_id):
+    """
+    根据地图ID获取显示用的地图名称
+    参数：
+        map_id: 地图ID
+    返回：
+        格式为 "ID-名称" 的字符串，如果找不到名称则返回原ID
+    """
+    map_data = this.console.init.global_key.get('Map', {})
+    if map_id in map_data:
+        map_name = map_data[map_id]
+        # 兼容dict和str格式
+        if isinstance(map_name, dict):
+            map_name = map_name.get('name') or map_name.get('全名') or str(map_id)
+        return f"{map_id}-{map_name}"
+    return str(map_id)
+
 def event_custom_chara_init(this):
     """
     [自定义角色创建 - 最终完整版]
@@ -259,28 +277,37 @@ def event_custom_chara_init(this):
             sel_big = getattr(this, 'temp_init_big', None)
             
             if not sel_big:
+                # 显示大地图列表
                 count = 0
                 row = this.cs("")
                 for big_map, content in map_data.items():
                     if big_map == 'DungeonInstance': continue
                     if not isinstance(content, dict): continue
                     
-                    row += this.cs(f"[{big_map}]").click(f"sel_big_{big_map}") + "  "
+                    # 使用辅助函数获取地图显示名称（ID-名称格式）
+                    display_name = get_map_display_name(this, big_map)
+                    row += this.cs(f"[{display_name}]").click(f"sel_big_{big_map}") + "  "
                     count += 1
                     if count % 4 == 0:
                         this.console.PRINT(row)
                         row = this.cs("")
                 if count % 4 != 0: this.console.PRINT(row)
             else:
-                this.console.PRINT(f"区域: {sel_big}", colors=(255, 215, 0))
+                # 显示当前选中大地图的区域名称
+                big_display_name = get_map_display_name(this, sel_big)
+                this.console.PRINT(f"区域: {big_display_name}", colors=(255, 215, 0))
                 small_maps = map_data.get(sel_big, {})
                 
+                # 显示小地图列表
                 count = 0
                 row = this.cs("")
                 for sm_map in small_maps.keys():
+                    # 过滤掉非地图项
                     if sm_map in ['status', 'dungeon_level', 'description', '音乐']: continue
                     
-                    row += this.cs(f"[{sm_map}]").click(f"sel_small_{sm_map}") + "  "
+                    # 使用辅助函数获取小地图显示名称（ID-名称格式）
+                    display_name = get_map_display_name(this, sm_map)
+                    row += this.cs(f"[{display_name}]").click(f"sel_small_{sm_map}") + "  "
                     count += 1
                     if count % 4 == 0:
                         this.console.PRINT(row)
