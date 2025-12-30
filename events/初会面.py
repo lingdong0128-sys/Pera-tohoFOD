@@ -33,7 +33,7 @@ def event_初会面检查(this):
             
             # 触发事件
             event_name = f"{i}_{data_source.get('口上类型', '初期口上')}_初会面"
-            this.event_manager.trigger_event(event_name, this, silent=True)
+            this.event_manager.trigger_event(event_name, this)
             
             # [关键] 写入数据
             data_source['初会面'] = 1

@@ -25,7 +25,7 @@ def event_fontreset(this):
             for i, font_name in enumerate(fontlist, 1):
                 this.console.PRINT(f"[{i}] {font_name}", click=str(i))
             
-            this.console.PRINT("输入字体编号或字体名称，输入 exit 退出:")
+            this.console.PRINT("[0] 返回/退出")
             this.console.PRINT_DIVIDER("-", 40)
             
             thisinput = this.console.INPUT()
@@ -34,7 +34,7 @@ def event_fontreset(this):
                 
             thisinput = thisinput.lower()
             
-            if thisinput == "exit":
+            if thisinput == "0":
                 running = False
                 this.console.PRINT("已退出字体设置", colors=(200, 255, 200))
                 continue

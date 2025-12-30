@@ -1,6 +1,6 @@
 def event_移动菜单(this):
     """
-    [UI事件] 显示地图移动菜单
+    [UI事件] 显示地图移动菜单 - 使用纯数字ID
     trigger: system_move
     功能：列出大地图 -> 列出小地图 -> 确认移动
     """
@@ -22,8 +22,10 @@ def event_移动菜单(this):
             this.console.PRINT("【 选 择 移 动 区 域 】", colors=(100, 255, 255))
             this.console.PRINT_DIVIDER("-")
             
-            # 遍历显示所有大地图
-            count = 0
+            # 遍历显示所有大地图，使用纯数字编号
+            count = 1
+            big_map_map = {} # 数字ID -> 地图名的映射
+            
             for big_map_name, content in map_data.items():
                 # 跳过特殊区域（如地牢实例）
                 if big_map_name == 'DungeonInstance': continue
@@ -33,16 +35,19 @@ def event_移动菜单(this):
                 status_text = "(异变)" if status == '腐化' else ""
                 color = (255, 100, 100) if status == '腐化' else (255, 255, 255)
                 
-                # 点击返回 "area_区域名"
-                btn = this.cs(f"[{big_map_name}] {status_text}").set_color(color).click(f"area_{big_map_name}")
+                # 使用纯数字ID
+                btn = this.cs(f"[{count}] {big_map_name} {status_text}").set_color(color).click(str(count))
                 this.console.PRINT(btn,'    ')
                 
+                # 建立映射
+                big_map_map[str(count)] = big_map_name
                 count += 1
-                if count % 3 == 0: this.console.PRINT("") # 换行
+                
+                if (count - 1) % 3 == 0: this.console.PRINT("") # 换行
 
             this.console.PRINT("")
             this.console.PRINT_DIVIDER("-")
-            this.console.PRINT(this.cs("[99] 取消").click("99"))
+            this.console.PRINT(this.cs("[0] 取消").click("0"))
 
         # --- 阶段 2: 选择房间 ---
         else:
@@ -52,39 +57,44 @@ def event_移动菜单(this):
             # 获取该区域下的房间
             area_content = map_data.get(selected_big_map, {})
             
-            count = 0
+            count = 1
+            room_map = {} # 数字ID -> 房间名的映射
+            
             for key, value in area_content.items():
                 # 过滤掉非房间的配置键
                 if key in ['状态', 'dungeon_level', 'description']: continue
                 
                 room_name = key
-                # 点击返回 "room_房间名"
-                btn = this.cs(f"[{room_name}]").click(f"room_{room_name}")
+                # 使用纯数字ID
+                btn = this.cs(f"[{count}] {room_name}").click(str(count))
                 this.console.PRINT(btn,'    ')
                 
+                # 建立映射
+                room_map[str(count)] = room_name
                 count += 1
-                if count % 4 == 0: this.console.PRINT("")
+                
+                if (count - 1) % 4 == 0: this.console.PRINT("")
 
             this.console.PRINT("")
             this.console.PRINT_DIVIDER("-")
-            this.console.PRINT(this.cs("[0] 返回上一级").click("back"), "    ", this.cs("[99] 取消").click("99"))
+            this.console.PRINT(this.cs("[0] 返回上一级").click("0"), "    ", this.cs("[99] 取消").click("99"))
 
         # --- 输入处理 ---
         user_input = this.console.INPUT()
         
-        if user_input == '99':
-            break # 退出菜单
+        if user_input == '99' or user_input == '0':
+            if selected_big_map:
+                selected_big_map = None # 返回区域选择
+            else:
+                break # 退出菜单
             
-        elif user_input == 'back':
-            selected_big_map = None # 返回区域选择
-            
-        elif user_input and user_input.startswith("area_"):
+        elif not selected_big_map and user_input in big_map_map:
             # 选中了大地图
-            selected_big_map = user_input.split("_", 1)[1]
+            selected_big_map = big_map_map[user_input]
             
-        elif user_input and user_input.startswith("room_"):
+        elif selected_big_map and user_input in room_map:
             # 选中了房间 -> 执行移动
-            target_room = user_input.split("_", 1)[1]
+            target_room = room_map[user_input]
             
             # 调用移动逻辑
             event_强制移动(this, '0', selected_big_map, target_room)
@@ -92,7 +102,12 @@ def event_移动菜单(this):
 
 def event_强制移动(this, chara_id, big_map, small_map):
     """
-    [工具函数] 执行强制移动 (带历史记录)
+    [工具函数] 执行强制移动 (带历史记录和时间消耗)
+    
+    Args:
+        chara_id: 角色ID
+        big_map: 目标大地图ID
+        small_map: 目标小地图ID (如果为None，会自动选择该大地图下编号第一的小地图)
     """
     # 0. 获取角色状态引用
     chara_state = this.console.allstate.get(chara_id)
@@ -123,15 +138,69 @@ def event_强制移动(this, chara_id, big_map, small_map):
         if len(history) > 50:
             history.pop(0)
 
-    # 2. 更新位置 (Update Position)
+    # 2. 获取地图数据
+    map_data = getattr(this.console, 'map_data', {})
+    target_area = map_data.get(big_map, {})
+    
+    # 3. 处理小地图自动选择逻辑
+    # 如果目标小地图为None，自动选择该大地图下编号顺位第一的小地图
+    if small_map is None:
+        # 获取该大地图下所有的房间键，过滤掉非房间配置键
+        room_keys = [key for key in target_area.keys() 
+                     if key not in ['状态', 'dungeon_level', 'description']]
+        
+        # 按编号排序，选择第一个
+        if room_keys:
+            # 尝试按数字排序
+            try:
+                room_keys.sort(key=lambda x: int(x))
+            except ValueError:
+                # 如果无法转为数字，按字符串排序
+                room_keys.sort()
+            
+            small_map = room_keys[0]
+        else:
+            # 如果没有房间，使用默认值
+            small_map = '0'
+
+    # 4. 计算并扣除时间消耗
+    time_cost_minutes = 0
+    move_type = ""
+    
+    # 判断移动类型并计算时间
+    if old_big == big_map and old_small != small_map:
+        # 同一大地图下的不同小地图间移动
+        time_cost_minutes = 2  # 小地图间移动消耗2分钟
+        move_type = "小地图间移动"
+    elif old_big != big_map:
+        # 不同大地图间移动
+        # 可以根据不同大地图设置不同的时间消耗，这里暂时统一为10分钟
+        time_cost_minutes = 10
+        move_type = "大地图间移动"
+    
+    # 执行时间扣除
+    if time_cost_minutes > 0:
+        # 调用时间控制事件增加时间
+        this.trigger_event('time_control', operation='add', minutes=time_cost_minutes)
+        
+        # 获取当前时间信息用于显示
+        time_info = this.trigger_event('time_control', operation='get', format_type='string')
+
+    # 5. 更新位置 (Update Position)
     this.charater_pwds[chara_id] = {
         '大地图': big_map,
         '小地图': small_map
     }
     
-    # 3. 提示与后续处理
+    # 6. 提示与后续处理
     if chara_id == '0':
-        this.console.PRINT(f"你移动到了 {big_map} - {small_map}。", colors=(100, 255, 100))
+        if move_type:
+            # 显示移动信息和时间消耗
+            this.console.PRINT(f"{move_type}：{old_big}({old_small}) -> {big_map}({small_map})", colors=(150, 200, 255))
+            this.console.PRINT(f"时间消耗：{time_cost_minutes}分钟", colors=(255, 255, 100))
+            this.console.PRINT(f"{time_info}", colors=(200, 200, 200))
+        else:
+            this.console.PRINT(f"你移动到了 {big_map} - {small_map}。", colors=(100, 255, 100))
         # 场景切换检测会在 start.py 的主循环开头自动触发
 
 # 注册事件

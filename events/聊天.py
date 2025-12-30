@@ -51,10 +51,19 @@ def event_聊天(this):
     # 5. 拼接事件名称 (保持不变)
     str_event = f"{target_id}_{kojo_type}_日常系"
 
-    # 6. 触发事件
+    # 6. 触发事件（带回退机制）
     try:
         this.current_kojo_context = kojo_context # 挂载数据
-        this.event_manager.trigger_event(str_event, this)
+        
+        # 尝试触发特定角色的口上
+        result = this.event_manager.trigger_event(str_event, this)
+        
+        # 如果找不到事件，回退到通用口上
+        if result is None:
+            common_event = f"common_日常_聊天"
+            this.console.PRINT(f"[调试] 未找到特定口上，使用通用口上: {common_event}", colors=(150, 150, 150))
+            this.event_manager.trigger_event(common_event, this)
+        
         this.current_kojo_context = None # 清理
         
         # [可选] 聊天结束后，更新 PREVCOM

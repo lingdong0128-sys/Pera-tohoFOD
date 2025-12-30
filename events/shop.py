@@ -54,25 +54,25 @@ def event_shop(things):
             
             things.console.PRINT("─" * 40)
             things.console.PRINT(
-                things.cs("[n]下一页").click("n"), "  ",
-                things.cs("[p]上一页").click("p"), "  ",
+                things.cs("[8]下一页").click("8"), "  ",
+                things.cs("[7]上一页").click("7"), "  ",
                 things.cs("[数字]查看详情").click(""), "  ",
-                things.cs("[e]退出").click("e")
+                things.cs("[0]退出").click("0")
             )
             things.console.PRINT(things.cs("请输入选择:"))
             
-            thisinput = things.console.INPUT().lower()
+            thisinput = things.console.INPUT()
             
-            if thisinput == 'e':
+            if thisinput == '0':
                 running = False
-            elif thisinput == 'n':
+            elif thisinput == '8':
                 if page < total_pages - 1:
                     page += 1
                 else:
                     things.console.PRINT(things.cs("已经是最后一页了"))
                     things.console.PRINT(things.cs("按任意键继续..."))
                     things.console.INPUT()
-            elif thisinput == 'p':
+            elif thisinput == '7':
                 if page > 0:
                     page -= 1
                 else:

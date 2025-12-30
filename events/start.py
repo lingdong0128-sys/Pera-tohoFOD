@@ -4,6 +4,10 @@ def event_start(this):
     this.event_manager.trigger_event('custom_chara_init', this)
     # 初始化时间系统
     this.event_manager.trigger_event('time_control', this, 'init')
+    # 初始化天气系统
+    system_key = this.console.init.global_key.setdefault('System', {})
+    if 'WEATHER' not in system_key:
+        system_key['WEATHER'] = '晴'
     # 这是一个示例，如果你们也有这种需要进入的循环的话请把每一个循环中需要使用的事件id加入这种列表中并初始化
     loadidlist = ['1', '2', '3', '4', '5', '99', '10', '8']
     # 当然这是作为机械加载文本位置的预备功能，现在这个列表还没什么用
@@ -200,28 +204,46 @@ def handle_daily_routine(this, ctx):
         # 4. [菜单选项]
         # =================================================
         this.console.PRINT(
-            this.cs("[1] 💬 对话/聊天").click("22"), "      ", 
-            this.cs("[2] 🔍 观察环境").click("100"), "      ",
+            this.cs("[1] 💬 对话/聊天").click("1"), "      ", 
+            this.cs("[2] 🔍 观察环境").click("2"), "      ",
             this.cs("[3] 🛒 商店").click("3"), "      ",
-            this.cs("[4] 🎒 物品栏").click("11")
+            this.cs("[4] 🎒 物品栏").click("4")
         )
         this.console.PRINT(
-            this.cs("[5] 🗺️ 移动/传送").click("12"), "      ",
-            this.cs("[6] 🎵 音乐控制").click("4"), "      ",
-            this.cs("[7] ⏰ 时间测试").click("test_time"), "      ",
-            this.cs("[8] 🛠️ 伪3D测试").click("33")
+            this.cs("[5] 🗺️ 移动/传送").click("5"), "      ",
+            this.cs("[6] 🎵 音乐控制").click("6"), "      ",
+            this.cs("[7] ⏰ 时间测试").click("7"), "      ",
+            this.cs("[8] 🛠️ 伪3D测试").click("8")
         )
         this.console.PRINT(
-            this.cs("[9] 💾 系统菜单").click("sys_menu"), "      ",
-            this.cs("[99] 🚪 退出游戏").click("99")
+            this.cs("[9] 💾 系统菜单").click("9"), "      ",
+            this.cs("[0] 🚪 退出游戏").click("0")
         )
+        
+        # [口上互动菜单] 只有选择了对象后才显示
+        target_id = this.console.init.charaters_key['0'].get('选择对象')
+        if target_id and target_id != '0':
+            this.console.PRINT_DIVIDER("-", length=60)
+            this.console.PRINT("【互动选项】")
+            this.console.PRINT(
+                this.cs("[11] 问候").click("11"), "      ",
+                this.cs("[12] 告别").click("12"), "      ",
+                this.cs("[13] 触摸").click("13"), "      ",
+                this.cs("[14] 抱住").click("14")
+            )
+            this.console.PRINT(
+                this.cs("[15] 询问").click("15"), "      ",
+                this.cs("[16] 观察").click("16"), "      ",
+                this.cs("[17] 邀请").click("17"), "      ",
+                this.cs("[18] H场景").click("18")
+            )
 
         # =================================================
         # 5. [输入处理]
         # =================================================
         input_val = this.console.INPUT()
 
-        if input_val == '99':
+        if input_val == '0':
             running = False
             
         elif input_val:
@@ -237,21 +259,31 @@ def handle_daily_routine(this, ctx):
                 this.console.PRINT(f"已将目光锁定在：{t_name}", colors=(200, 255, 200))
             
             # --- 常用菜单 ---
-            elif input_val == '22': this.event_manager.trigger_event('聊天', this)
-            elif input_val == '100':this.event_manager.trigger_event('findthem', this)
+            elif input_val == '1': this.event_manager.trigger_event('聊天', this)
+            elif input_val == '2': this.event_manager.trigger_event('findthem', this)
             elif input_val == '3':  this.event_manager.trigger_event('shop', this)
-            elif input_val == '11': this.event_manager.trigger_event('menu_inventory', this)
-            elif input_val == '4':  this.event_manager.trigger_event('music_control', this)
-            elif input_val == '12': 
+            elif input_val == '4': this.event_manager.trigger_event('menu_inventory', this)
+            elif input_val == '6':  this.event_manager.trigger_event('music_control', this)
+            elif input_val == '5': 
                 this.event_manager.trigger_event('移动菜单', this)
                 continue
             
             # --- 系统菜单 ---
-            elif input_val == 'sys_menu':
+            elif input_val == '9':
                 this.event_manager.trigger_event('系统菜单', this)
             
-            elif input_val == '33': this.event_manager.trigger_event('water_demo', this)
-            elif input_val == 'test_time': this.event_manager.trigger_event('test_time', this)
+            elif input_val == '8': this.event_manager.trigger_event('water_demo', this)
+            elif input_val == '7': this.event_manager.trigger_event('test_time', this)
+            
+            # --- 口上互动快捷调用 ---
+            elif input_val == '11': this.event_manager.trigger_event('日常_问候', this)
+            elif input_val == '12': this.event_manager.trigger_event('日常_告别', this)
+            elif input_val == '13': this.event_manager.trigger_event('日常_触摸', this)
+            elif input_val == '14': this.event_manager.trigger_event('日常_抱住', this)
+            elif input_val == '15': this.event_manager.trigger_event('日常_询问', this)
+            elif input_val == '16': this.event_manager.trigger_event('日常_观察', this)
+            elif input_val == '17': this.event_manager.trigger_event('日常_邀请', this)
+            elif input_val == '18': this.event_manager.trigger_event('H_开始', this)
             
             this.console.PRINT("")
 def handle_dungeon_crawling(this):
@@ -339,15 +371,15 @@ def handle_dungeon_crawling(this):
         valid_moves = {}
         
         if exits.get('前'):
-            nav_text += this.cs(" [↑ 前进] ").click("move_前")
-            valid_moves["move_前"] = exits['前']
+            nav_text += this.cs(" [1 前进] ").click("1")
+            valid_moves["1"] = exits['前']
             
         if exits.get('后'):
-            nav_text += this.cs(" [↓ 后退] ").click("move_后")
-            valid_moves["move_后"] = exits['后']
+            nav_text += this.cs(" [2 后退] ").click("2")
+            valid_moves["2"] = exits['后']
             
-        nav_text += "    " + this.cs("[I] 物品栏").click("I")
-        nav_text += "    " + this.cs("[Q] 撤退 (返回日常)").click("Q")
+        nav_text += "    " + this.cs("[3 物品栏]").click("3")
+        nav_text += "    " + this.cs("[9 撤退 (返回日常)]").click("9")
 
         this.console.PRINT(nav_text)
         
@@ -359,14 +391,14 @@ def handle_dungeon_crawling(this):
             this.charater_pwds['0']['地牢位置'] = target_room
             this.console.PRINT("你移动到了下一个区域...")
             
-        elif user_input == "Q":
+        elif user_input == "9":
             this.console.PRINT("确定要放弃探索吗？(y/n)", colors=(255, 0, 0))
             if this.console.INPUT().lower() == "y":
                  # [修改] 调用通用撤离函数
                  perform_dungeon_exit(this)
                  crawling = False
         
-        elif user_input == "I":
+        elif user_input == "3":
             this.event_manager.trigger_event('menu_inventory', this)
 # [新增] 辅助函数：安全撤离地牢
 def perform_dungeon_exit(this):

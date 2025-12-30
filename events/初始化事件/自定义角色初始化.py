@@ -1,22 +1,25 @@
 from utils.era_handler import EraKojoHandler
 
-# 辅助函数：获取地图显示名称（ID-名称格式）
+# 辅助函数：获取地图显示名称（仅名称格式）
 def get_map_display_name(this, map_id):
     """
     根据地图ID获取显示用的地图名称
     参数：
         map_id: 地图ID
     返回：
-        格式为 "ID-名称" 的字符串，如果找不到名称则返回原ID
+        地图名称字符串，如果找不到名称则返回原ID
     """
-    map_data = this.console.init.global_key.get('Map', {})
-    if map_id in map_data:
-        map_name = map_data[map_id]
+    # 从global_key中获取map数据（注意键名是小写'map'）
+    map_data = this.console.init.global_key.get('map', {})
+    # 确保map_id是字符串类型
+    map_id_str = str(map_id)
+    if map_id_str in map_data:
+        map_name = map_data[map_id_str]
         # 兼容dict和str格式
         if isinstance(map_name, dict):
-            map_name = map_name.get('name') or map_name.get('全名') or str(map_id)
-        return f"{map_id}-{map_name}"
-    return str(map_id)
+            map_name = map_name.get('name') or map_name.get('全名') or map_id_str
+        return str(map_name)
+    return map_id_str
 
 def event_custom_chara_init(this):
     """
@@ -160,8 +163,8 @@ def event_custom_chara_init(this):
             curr_name = this.console.init.charaters_key['0'].get('全名', '未设定')
             curr_call = this.console.init.charaters_key['0'].get('称呼', '未设定')
             
-            this.console.PRINT(this.cs(f" [1] 全名: {curr_name}").click("set_name"))
-            this.console.PRINT(this.cs(f" [2] 称呼: {curr_call}").click("set_call"))
+            this.console.PRINT(this.cs(f" [1] 全名: {curr_name}").click("1"))
+            this.console.PRINT(this.cs(f" [2] 称呼: {curr_call}").click("2"))
             this.console.PRINT("")
             this.console.PRINT(" (点击选项进行修改)")
 
@@ -179,10 +182,11 @@ def event_custom_chara_init(this):
                 r_name = kojo.TALENTNAME.get(rid, f"Race{rid}")
                 is_set = (kojo.TALENT.get(rid, 0) == '1')
                 
+                race_id_num = str(100 + int(rid) - 190)  # 将190-196映射为100-106
                 if is_set:
-                    race_line += this.cs(f"[★ {r_name}]").click(f"race_{rid}").set_color((255, 255, 0)) + " "
+                    race_line += this.cs(f"[★ {r_name}]").click(race_id_num).set_color((255, 255, 0)) + " "
                 else:
-                    race_line += this.cs(f"[  {r_name}]").click(f"race_{rid}").set_color((150, 150, 150)) + " "
+                    race_line += this.cs(f"[  {r_name}]").click(race_id_num).set_color((150, 150, 150)) + " "
             this.console.PRINT(race_line)
 
             # --- 属性 ---
@@ -192,10 +196,12 @@ def event_custom_chara_init(this):
                 b_name = kojo.BASENAME.get(bid, f"Attr{bid}")
                 val = int(kojo.BASE.get(b_name, 1000))
                 
+                attr_num_dec = str(200 + int(bid))  # 减少属性ID映射为200+
+                attr_num_inc = str(300 + int(bid))  # 增加属性ID映射为300+
                 line = this.cs(f"{b_name}: {val:>4}  ")
-                line += this.cs("[-]").click(f"dec_{bid}").set_color((100, 200, 255) if val > 500 else (100, 100, 100))
+                line += this.cs("[-]").click(attr_num_dec).set_color((100, 200, 255) if val > 500 else (100, 100, 100))
                 line += " / "
-                line += this.cs("[+]").click(f"inc_{bid}").set_color((255, 100, 100) if bonus_points > 0 else (100, 100, 100))
+                line += this.cs("[+]").click(attr_num_inc).set_color((255, 100, 100) if bonus_points > 0 else (100, 100, 100))
                 
                 this.console.PRINT(line)
 
@@ -207,11 +213,14 @@ def event_custom_chara_init(this):
             
             # 分类导航
             cat_line = this.cs("")
+            cat_idx = 0
             for cat in TALENT_CONFIG.keys():
+                cat_num = str(400 + cat_idx)  # 分类映射为400+
                 if selected_talent_category == cat:
                     cat_line += this.cs(f"[{cat}]").set_color((100, 255, 255)) + " "
                 else:
-                    cat_line += this.cs(f" {cat} ").click(f"cat_{cat}").set_color((150, 150, 150)) + " "
+                    cat_line += this.cs(f" {cat} ").click(cat_num).set_color((150, 150, 150)) + " "
+                cat_idx += 1
             this.console.PRINT(cat_line)
             this.console.PRINT_DIVIDER("-")
 
@@ -249,7 +258,8 @@ def event_custom_chara_init(this):
                     if cfg['type'] == 'bool':
                         status = "✅" if curr_val else "⬜"
                         color = (100, 255, 100) if curr_val else (180, 180, 180)
-                        item = this.cs(f"{status} {tname:<6}").click(f"t_bool_{tid}").set_color(color)
+                        bool_num = str(500 + int(tid))  # bool类型映射为500+
+                        item = this.cs(f"{status} {tname:<6}").click(bool_num).set_color(color)
                     
                     # B. 数值/枚举型 (Range)
                     elif cfg['type'] == 'range':
@@ -257,7 +267,8 @@ def event_custom_chara_init(this):
                         if 'map' in cfg and val_display in cfg['map']:
                             val_display = cfg['map'][val_display]
                         
-                        item = this.cs(f"🔷 {tname}: <{val_display}>").click(f"t_range_{tid}_{cfg['min']}_{cfg['max']}").set_color((100, 200, 255))
+                        range_num = str(600 + int(tid))  # range类型映射为600+
+                        item = this.cs(f"🔷 {tname}: <{val_display}>").click(range_num).set_color((100, 200, 255))
 
                 row_str += item + "   "
                 count += 1
@@ -286,7 +297,8 @@ def event_custom_chara_init(this):
                     
                     # 使用辅助函数获取地图显示名称（ID-名称格式）
                     display_name = get_map_display_name(this, big_map)
-                    row += this.cs(f"[{display_name}]").click(f"sel_big_{big_map}") + "  "
+                    big_num = str(700 + int(big_map)) if big_map.isdigit() else f"700_{big_map}"
+                    row += this.cs(f"[{display_name}]").click(big_num) + "  "
                     count += 1
                     if count % 4 == 0:
                         this.console.PRINT(row)
@@ -303,11 +315,12 @@ def event_custom_chara_init(this):
                 row = this.cs("")
                 for sm_map in small_maps.keys():
                     # 过滤掉非地图项
-                    if sm_map in ['status', 'dungeon_level', 'description', '音乐']: continue
+                    if sm_map in ['状态', 'dungeon_level', 'description', '音乐']: continue
                     
                     # 使用辅助函数获取小地图显示名称（ID-名称格式）
                     display_name = get_map_display_name(this, sm_map)
-                    row += this.cs(f"[{display_name}]").click(f"sel_small_{sm_map}") + "  "
+                    small_num = str(800 + int(sm_map)) if sm_map.isdigit() else f"800_{sm_map}"
+                    row += this.cs(f"[{display_name}]").click(small_num) + "  "
                     count += 1
                     if count % 4 == 0:
                         this.console.PRINT(row)
@@ -315,7 +328,7 @@ def event_custom_chara_init(this):
                 if count % 4 != 0: this.console.PRINT(row)
                 
                 this.console.PRINT("")
-                this.console.PRINT(this.cs("<< 重选区域").click("reset_big"))
+                this.console.PRINT(this.cs("[999]<< 重选区域").click("999"))
 
         # ================= 底部导航 =================
         this.console.PRINT("")
@@ -323,13 +336,13 @@ def event_custom_chara_init(this):
         
         nav_btns = this.cs("")
         if current_stage_idx > 0:
-            nav_btns += this.cs("[7] < 上一步").click("prev") + "      "
+            nav_btns += this.cs("[7] < 上一步").click("7") + "      "
         
         if current_stage_idx < len(STAGES) - 1:
-            nav_btns += this.cs("[9] 下一步 >").click("next")
+            nav_btns += this.cs("[9] 下一步 >").click("9")
         else:
             if getattr(this, 'temp_init_ready', False):
-                nav_btns += this.cs("[0] ★ 完成设定并开始游戏 ★").click("finish").set_color((100, 255, 100))
+                nav_btns += this.cs("[0] ★ 完成设定并开始游戏 ★").click("0").set_color((100, 255, 100))
             else:
                 nav_btns += this.cs("请选择出生地").set_color((150, 150, 150))
                 
@@ -339,90 +352,109 @@ def event_custom_chara_init(this):
         inp = this.console.INPUT()
 
         # 导航
-        if inp == 'next': current_stage_idx += 1
-        elif inp == 'prev': current_stage_idx -= 1
+        if inp == '9': current_stage_idx += 1  # 下一步
+        elif inp == '7': current_stage_idx -= 1  # 上一步
         
         # 阶段 0: 名字
-        elif inp == 'set_name':
+        elif inp == '1':  # set_name
             this.console.PRINT("输入全名:")
             n = this.console.INPUT()
             if n: this.console.init.charaters_key['0']['全名'] = n
-        elif inp == 'set_call':
+        elif inp == '2':  # set_call
             this.console.PRINT("输入称呼:")
             n = this.console.INPUT()
             if n: this.console.init.charaters_key['0']['称呼'] = n
 
-        # 阶段 1: 种族与属性
-        elif inp and inp.startswith("race_"):
-            rid = inp.split('_')[1]
-            for r in RACE_IDS: kojo.TALENT.set(r, 0)
-            kojo.TALENT.set(rid, 1)
-        elif inp and inp.startswith("inc_"):
-            bid = inp.split('_')[1]
-            bname = kojo.BASENAME.get(bid)
-            if bonus_points > 0:
-                kojo.BASE.set(bname, int(kojo.BASE.get(bname, 1000)) + 100)
-                bonus_points -= 1
-        elif inp and inp.startswith("dec_"):
-            bid = inp.split('_')[1]
-            bname = kojo.BASENAME.get(bid)
-            curr = int(kojo.BASE.get(bname, 1000))
-            if curr > 500:
-                kojo.BASE.set(bname, curr - 100)
-                bonus_points += 1
+        # 阶段 1: 种族与属性 (100-106种族, 200+减少属性, 300+增加属性)
+        elif inp and inp.isdigit():
+            inp_num = int(inp)
+            
+            # 种族选择 (100-106 -> 190-196)
+            if 100 <= inp_num <= 106:
+                rid = str(inp_num - 100 + 190)
+                for r in RACE_IDS: kojo.TALENT.set(r, 0)
+                kojo.TALENT.set(rid, 1)
+            
+            # 减少属性 (200-203 -> 0,1,6,11)
+            elif 200 <= inp_num <= 211:
+                bid = str(inp_num - 200)
+                bname = kojo.BASENAME.get(bid)
+                curr = int(kojo.BASE.get(bname, 1000))
+                if curr > 500:
+                    kojo.BASE.set(bname, curr - 100)
+                    bonus_points += 1
+            
+            # 增加属性 (300-311 -> 0,1,6,11)
+            elif 300 <= inp_num <= 311:
+                bid = str(inp_num - 300)
+                bname = kojo.BASENAME.get(bid)
+                if bonus_points > 0:
+                    kojo.BASE.set(bname, int(kojo.BASE.get(bname, 1000)) + 100)
+                    bonus_points -= 1
 
-        # 阶段 2: 素质
-        elif inp and inp.startswith("cat_"):
-            selected_talent_category = inp.split('_', 1)[1]
-            
-        elif inp and inp.startswith("sex_"):
-            val = inp.split('_')[1]
-            kojo.TALENT.set('2', val) # 2 是性别ID
-            
-            # [核心修改] 性别切换时的自动清理逻辑
-            if val == '1':   # 女性
-                kojo.TALENT.set('1', 0) # 移除童贞
-            elif val == '2': # 男性
-                kojo.TALENT.set('0', 0) # 移除处女
-            # 扶她(3) 不做清除
-            
-        elif inp and inp.startswith("t_bool_"):
-            tid = inp.split('_')[2]
-            curr = int(kojo.TALENT.get(tid, 0))
-            kojo.TALENT.set(tid, 0 if curr else 1)
-            
-        elif inp and inp.startswith("t_range_"):
-            # t_range_ID_MIN_MAX
-            parts = inp.split('_')
-            tid, min_v, max_v = parts[2], int(parts[3]), int(parts[4])
-            curr = int(kojo.TALENT.get(tid, 0))
-            # 循环逻辑：+1，如果超过最大值则回到最小值
-            next_val = curr + 1
-            if next_val > max_v: next_val = min_v
-            kojo.TALENT.set(tid, next_val)
+            # 阶段 2: 素质分类选择 (400+)
+            elif 400 <= inp_num < 500:
+                cat_list = list(TALENT_CONFIG.keys())
+                cat_idx = inp_num - 400
+                if cat_idx < len(cat_list):
+                    selected_talent_category = cat_list[cat_idx]
 
-        # 阶段 3: 地点
-        elif inp and inp.startswith("sel_big_"):
-            this.temp_init_big = inp.split('_', 2)[2]
-        elif inp == 'reset_big':
-            this.temp_init_big = None
-            this.temp_init_ready = False
-        elif inp and inp.startswith("sel_small_"):
-            sm_map = inp.split('_', 2)[2]
-            this.console.init.charaters_key['0']['大地图'] = this.temp_init_big
-            this.console.init.charaters_key['0']['小地图'] = sm_map
-            this.temp_init_ready = True 
-        
-        # 完成
-        elif inp == 'finish':
-            this.console.PRINT("正在构建世界数据...", colors=(100, 255, 100))
-            #this.event_manager.trigger_event('build_state', this)
-            #this.event_manager.trigger_event('init_race', this)
-            
-            if hasattr(this, 'temp_init_big'): del this.temp_init_big
-            if hasattr(this, 'temp_init_ready'): del this.temp_init_ready
-            
-            break 
+            # 阶段 2: Bool类型素质 (500+)
+            elif 500 <= inp_num < 600:
+                tid = str(inp_num - 500)
+                curr = int(kojo.TALENT.get(tid, 0))
+                kojo.TALENT.set(tid, 0 if curr else 1)
+
+            # 阶段 2: Range类型素质 (600+)
+            elif 600 <= inp_num < 700:
+                tid = str(inp_num - 600)
+                # 查找配置获取min和max
+                curr = int(kojo.TALENT.get(tid, 0))
+                for cfg in TALENT_CONFIG.get(selected_talent_category, []):
+                    if cfg['id'] == tid and cfg['type'] == 'range':
+                        min_v = cfg['min']
+                        max_v = cfg['max']
+                        # 循环逻辑：+1，如果超过最大值则回到最小值
+                        next_val = curr + 1
+                        if next_val > max_v: next_val = min_v
+                        kojo.TALENT.set(tid, next_val)
+                        break
+
+            # 阶段 3: 大地图选择 (700+)
+            elif 700 <= inp_num < 800:
+                map_data = getattr(this.console, 'map_data', {})
+                big_map = str(inp_num - 700)
+                if big_map in map_data:
+                    this.temp_init_big = big_map
+
+            # 阶段 3: 小地图选择 (800+)
+            elif 800 <= inp_num < 900:
+                if hasattr(this, 'temp_init_big') and this.temp_init_big:
+                    sm_map = str(inp_num - 800)
+                    map_data = getattr(this.console, 'map_data', {})
+                    if this.temp_init_big in map_data:
+                        small_maps = map_data.get(this.temp_init_big, {})
+                        if sm_map in small_maps:
+                            this.console.init.charaters_key['0']['大地图'] = this.temp_init_big
+                            this.console.init.charaters_key['0']['小地图'] = sm_map
+                            this.temp_init_ready = True
+
+            # 重选区域
+            elif inp == '999':
+                this.temp_init_big = None
+                this.temp_init_ready = False
+
+            # 完成
+            elif inp == '0':
+                if current_stage_idx == 3 and getattr(this, 'temp_init_ready', False):
+                    this.console.PRINT("正在构建世界数据...", colors=(100, 255, 100))
+                    #this.event_manager.trigger_event('build_state', this)
+                    #this.event_manager.trigger_event('init_race', this)
+                    
+                    if hasattr(this, 'temp_init_big'): del this.temp_init_big
+                    if hasattr(this, 'temp_init_ready'): del this.temp_init_ready
+                    
+                    break 
 
 # 注册
 event_custom_chara_init.event_trigger = "custom_chara_init"
