@@ -4,6 +4,12 @@
 当找不到特定角色的口上时会回退到这里
 """
 from utils.era_handler import EraKojoHandler
+from events.珠计算 import (
+    add_goodwill_palam,
+    add_mental_palam,
+    add_negative_palam,
+    get_palam_info
+)
 
 
 def event_common_日常_聊天(this):
@@ -30,6 +36,10 @@ def event_common_日常_聊天(this):
         this.console.PRINT(f"{call_name}看着你：「嗯？{master_name}，找我有事吗？」", colors=COL_TALK)
     else:
         this.console.PRINT(f"{call_name}淡淡地说道：「你好，{master_name}。」", colors=COL_TALK)
+
+    # 聊天增加少量好意
+    add_goodwill_palam(this, kojo.TARGET, '好意', 10)
+    this.console.PRINT(f"（好意+10）", colors=COL_DESC)
 
     this.console.INPUT()
 
@@ -96,7 +106,19 @@ def event_common_日常_触摸(this):
     COL_TALK = (255, 255, 255)
     COL_DESC = (170, 170, 170)
 
+    favor = kojo.CFLAG.get('好感度', 0)
+
     this.console.PRINT(f"{call_name}：「...诶？突然...」", colors=COL_TALK)
+
+    # 根据好感度决定增加恭顺还是反感
+    if favor >= 100:
+        add_mental_palam(this, kojo.TARGET, '恭順', 5)
+        add_goodwill_palam(this, kojo.TARGET, '好意', 5)
+        this.console.PRINT(f"（恭顺+5，好意+5）", colors=COL_DESC)
+    else:
+        # 好感度低时可能增加反感
+        this.console.PRINT(f"（感到有些不适）", colors=COL_DESC)
+
     this.console.INPUT()
 
 
@@ -120,8 +142,15 @@ def event_common_日常_抱住(this):
 
     if favor >= 200:
         this.console.PRINT(f"{call_name}脸红了，没有推开你：「{master_name}...」", colors=COL_TALK)
+        # 高好感时增加好意和恭顺
+        add_goodwill_palam(this, kojo.TARGET, '好意', 20)
+        add_mental_palam(this, kojo.TARGET, '恭順', 15)
+        this.console.PRINT(f"（好意+20，恭顺+15）", colors=COL_DESC)
     else:
         this.console.PRINT(f"{call_name}有些困惑：「{master_name}？这是...？」", colors=COL_TALK)
+        # 低好感时抱住陌生人是不礼貌的行为，增加反感
+        add_negative_palam(this, kojo.TARGET, '反感', 10)
+        this.console.PRINT(f"（反感+10，感到不适）", colors=(255, 150, 150))
 
     this.console.INPUT()
 
@@ -174,16 +203,24 @@ def event_common_日常_邀请(this):
     call_name = kojo.CALLNAME
 
     COL_TALK = (255, 255, 255)
+    COL_DESC = (170, 170, 170)
 
     favor = kojo.CFLAG.get('好感度', 0)
 
     if favor >= 200:
         this.console.PRINT(f"{call_name}：「好啊，{master_name}，我们去哪？」", colors=COL_TALK)
+        # 高好感时增加较多好意
+        add_goodwill_palam(this, kojo.TARGET, '好意', 25)
     elif favor >= 50:
         this.console.PRINT(f"{call_name}：「嗯...让我考虑一下。好的，走吧。」", colors=COL_TALK)
+        # 中等好感时增加少量好意
+        add_goodwill_palam(this, kojo.TARGET, '好意', 15)
     else:
         this.console.PRINT(f"{call_name}：「{master_name}，要一起去吗？」", colors=COL_TALK)
+        # 低好感时增加少量好意
+        add_goodwill_palam(this, kojo.TARGET, '好意', 10)
 
+    this.console.PRINT(f"（好意+{'25' if favor >= 200 else '15' if favor >= 50 else '10'}）", colors=COL_DESC)
     this.console.INPUT()
 
 
