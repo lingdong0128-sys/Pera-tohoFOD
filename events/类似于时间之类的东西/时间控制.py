@@ -36,6 +36,9 @@ class TimeManager:
             'CURRENT_FESTIVAL': None
         }
         
+        # 初始化时检查节日
+        self._check_festival()
+        
     def parse_time_config(self, csv_data: Dict[str, str]):
         """
         解析时间单位配置

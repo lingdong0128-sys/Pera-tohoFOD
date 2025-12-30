@@ -1,6 +1,9 @@
-首先，确定事件，作为事件应该只使用event下的其他事件和Pera框架的接口去实现事件功能，关于Pera框架请先通过mcp查https://deepwiki.com/py-era/Pyera
+首先，确定事件，作为事件应该只使用event下的其他事件和Pera框架的接口去实现事件功能
+无论是什么事件，你必须先了解Pera框架的运行逻辑
+关于Pera框架请先看doc下面的readme或者通过mcp查https://deepwiki.com/py-era/Pyera
+然后去看框架的py文件，动态加载器，控制台，init，erahandler等，必须要属性框架的各种接口调用和运行逻辑
 每添加完一个事件之后必须进行git存档，命名为xx事件修改前存档
-先从Pera幻想FOD设计思路中确定功能，接口，源文件
+从Pera幻想FOD设计思路中确定功能，接口，源文件
 再从csv文件夹下面确定源文件是否存在以及是否可用，若不存在则创建
 进行事件开发时若有不清楚的流程，先查本地文档，再参考本地的其他事件，再通过mcp的https://deepwiki.com/lingdong0128-sys/Pera-tohoFOD查文档
 编写事件时必须写注释

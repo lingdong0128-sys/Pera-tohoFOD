@@ -141,7 +141,27 @@ def handle_daily_routine(this, ctx):
         if CharaterImgList:
             this.console.PRINTIMG(None, img_list=CharaterImgList, size=(180, 180))
         
-        this.console.PRINT(InOneMapCharater) 
+        this.console.PRINT(InOneMapCharater)
+        
+        # [时间显示] 显示当前游戏时间
+        year = ctx['session'].get('year', 1)
+        month = ctx['session'].get('month', 1)
+        day = ctx['session'].get('day', 1)
+        hour = ctx['session'].get('hour', 0)
+        minute = ctx['session'].get('minute', 0)
+        weekday = ctx['session'].get('weekday', 1)
+        festival = ctx['session'].get('current_festival', None)
+        
+        # 格式化时间显示
+        time_str = f"第{year}年 {month}月{day}日 {hour:02d}:{minute:02d}"
+        weekdays = ['一', '二', '三', '四', '五', '六', '日']
+        weekday_str = f"星期{weekdays[weekday - 1]}"
+        
+        time_info = this.cs(f"🕐 {time_str} {weekday_str}").set_color((255, 200, 100))
+        if festival:
+            time_info += "    " + this.cs(f"🎉 {festival}").set_color((255, 255, 100))
+        
+        this.console.PRINT(time_info)
         this.console.PRINT_DIVIDER("·", length=60)
 
         # [状态栏] 玩家信息 (从 ctx 读取)
@@ -188,10 +208,11 @@ def handle_daily_routine(this, ctx):
         this.console.PRINT(
             this.cs("[5] 🗺️ 移动/传送").click("12"), "      ",
             this.cs("[6] 🎵 音乐控制").click("4"), "      ",
-            this.cs("[7] 💾 系统菜单").click("sys_menu"),"      ",
+            this.cs("[7] ⏰ 时间测试").click("test_time"), "      ",
             this.cs("[8] 🛠️ 伪3D测试").click("33")
         )
         this.console.PRINT(
+            this.cs("[9] 💾 系统菜单").click("sys_menu"), "      ",
             this.cs("[99] 🚪 退出游戏").click("99")
         )
 
@@ -230,6 +251,7 @@ def handle_daily_routine(this, ctx):
                 this.event_manager.trigger_event('系统菜单', this)
             
             elif input_val == '33': this.event_manager.trigger_event('water_demo', this)
+            elif input_val == 'test_time': this.event_manager.trigger_event('test_time', this)
             
             this.console.PRINT("")
 def handle_dungeon_crawling(this):
