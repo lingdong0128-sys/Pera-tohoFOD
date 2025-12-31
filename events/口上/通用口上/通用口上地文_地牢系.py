@@ -145,3 +145,27 @@ def event_common_地牢_休息(this):
 
 
 event_common_地牢_休息.event_trigger = 'common_地牢_休息'
+
+
+def event_common_地牢_同行属性判定(this):
+    """
+    地牢同行属性判定接口
+    在地牢主事件每次操作时调用，用于赋予同行属性
+    返回同行属性列表
+    """
+    context = getattr(this, 'current_kojo_context', {})
+    kojo = EraKojoHandler(this.console, context)
+    
+    # 默认无同行属性
+    companion_attributes = []
+    
+    # 获取角色ID
+    char_id = kojo.TARGET
+    
+    # 这里可以根据角色ID返回不同的同行属性
+    # 具体实现由角色差分口上覆盖
+    
+    return companion_attributes
+
+
+event_common_地牢_同行属性判定.event_trigger = 'common_地牢_同行属性判定'
