@@ -344,8 +344,8 @@ def handle_dungeon_crawling(this):
             if not room_data.get('cleared'):
                 this.console.PRINT_DIVIDER("!")
                 
-                # 触发事件 (比如战斗、陷阱)
-                this.event_manager.trigger_event(room_event, this)
+                # 触发事件 (比如战斗、陷阱)，传递房间数据
+                this.event_manager.trigger_event(room_event, this, room_data)
                 
                 # 标记清理
                 room_data['cleared'] = True
