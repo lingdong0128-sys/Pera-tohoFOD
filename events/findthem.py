@@ -124,3 +124,4 @@ def event_findthem(self):
     
     self.console.PRINT("「你现在应该可以说话了！」", colors=(0, 188, 212))
     self.console.PRINT("「说点什么？」", colors=(0, 188, 212))
+# flag{yesyouareright_youfindme!}

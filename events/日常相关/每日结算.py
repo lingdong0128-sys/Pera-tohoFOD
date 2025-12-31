@@ -193,7 +193,10 @@ def _execute_daily_settlement(this) -> dict:
     # 3. 更新天气
     _update_weather(this)
     
-    # 4. 主线剧情判定（简化处理，后续扩展）
+    # 4. 珠转换：将好意珠转换为好感信赖
+    _convert_palam(this)
+    
+    # 5. 主线剧情判定（简化处理，后续扩展）
     story_event = _check_main_story(this)
     
     return {
@@ -485,6 +488,22 @@ def _update_weather(this):
     except Exception as e:
         print(f'天气更新失败: {e}')
         return None
+
+
+def _convert_palam(this):
+    """
+    珠转换：将好意珠转换为好感信赖
+    
+    根据设计思路：
+    - 每日结算时将好意珠转换为好感信赖
+    - 转换比例根据好意等级判断
+    - 等级0-1：10:1，等级2-3：5:1，等级4+：3:1
+    """
+    try:
+        # 调用珠计算事件的每日结算转换函数
+        this.console.event_manager.trigger_event('每日结算_珠转换', this)
+    except Exception as e:
+        print(f'珠转换失败: {e}')
 
 
 def _check_main_story(this) -> dict:
