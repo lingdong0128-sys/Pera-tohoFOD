@@ -17,18 +17,21 @@ def event_dungeon_initialize_stats(this, char_id: str = None) -> Dict[int, int]:
     
     参数:
         this: 事件上下文对象
-        char_id: 角色ID，如果为None则使用当前目标角色
+        char_id: 角色ID，如果为None则使用当前选择的目标角色
     
     返回:
         地牢属性字典 {属性ID: 属性值}
     """
     # 获取目标角色ID
     if char_id is None:
-        char_id = this.kojo.TARGET
+        char_id = this.console.init.charaters_key.get('0', {}).get('选择对象', '0')
     
-    # 地牢属性存储在CFLAG字典中，使用'dungeon_stats'键
-    # 由于CFLAG可能不支持直接设置字典，我们使用独立的临时存储
-    # 这里使用全局状态存储地牢属性
+    # 创建kojo上下文
+    from utils.era_handler import EraKojoHandler
+    context = {'TARGET': char_id}
+    kojo = EraKojoHandler(this.console, context)
+    
+    # 地牢属性存储在全局状态中
     if 'dungeon_stats' not in this.console.allstate:
         this.console.allstate['dungeon_stats'] = {}
     
@@ -39,11 +42,11 @@ def event_dungeon_initialize_stats(this, char_id: str = None) -> Dict[int, int]:
     
     # 获取角色基础属性
     # 注意：这里需要假设角色CSV中有相应的属性，如果不存在使用默认值
-    base_stamina = int(this.kojo.BASE[char_id].get('体力', 100))
-    base_attack = int(this.kojo.BASE[char_id].get('攻击', 10))
-    base_defense = int(this.kojo.BASE[char_id].get('防御', 5))
-    base_agility = int(this.kojo.BASE[char_id].get('敏捷', 10))
-    role = this.kojo.NAME if hasattr(this.kojo, 'NAME') else ''
+    base_stamina = int(kojo.BASE.get('体力', 100))
+    base_attack = int(kojo.BASE.get('攻击', 10))
+    base_defense = int(kojo.BASE.get('防御', 5))
+    base_agility = int(kojo.BASE.get('敏捷', 10))
+    role = kojo.CALLNAME if hasattr(kojo, 'CALLNAME') else ''
     
     # 转换基础属性到地牢属性
     # 0: 攻击
@@ -98,13 +101,13 @@ def event_dungeon_get_stat(this, stat_id: int, char_id: str = None) -> int:
     参数:
         this: 事件上下文对象
         stat_id: 地牢属性ID
-        char_id: 角色ID，如果为None则使用当前目标角色
+        char_id: 角色ID，如果为None则使用当前选择的目标角色
     
     返回:
         属性值，如果属性不存在返回0
     """
     if char_id is None:
-        char_id = this.kojo.TARGET
+        char_id = this.console.init.charaters_key.get('0', {}).get('选择对象', '0')
     
     # 确保地牢属性已初始化
     if 'dungeon_stats' not in this.console.allstate:
@@ -124,13 +127,13 @@ def event_dungeon_set_stat(this, stat_id: int, value: int, char_id: str = None) 
         this: 事件上下文对象
         stat_id: 地牢属性ID
         value: 要设置的值
-        char_id: 角色ID，如果为None则使用当前目标角色
+        char_id: 角色ID，如果为None则使用当前选择的目标角色
     
     返回:
         设置后的属性值
     """
     if char_id is None:
-        char_id = this.kojo.TARGET
+        char_id = this.console.init.charaters_key.get('0', {}).get('选择对象', '0')
     
     # 确保地牢属性已初始化
     if 'dungeon_stats' not in this.console.allstate:
@@ -157,7 +160,7 @@ def event_dungeon_modify_stat(this, stat_id: int, delta: int, char_id: str = Non
         this: 事件上下文对象
         stat_id: 地牢属性ID
         delta: 变化量（正数增加，负数减少）
-        char_id: 角色ID，如果为None则使用当前目标角色
+        char_id: 角色ID，如果为None则使用当前选择的目标角色
     
     返回:
         修改后的属性值
@@ -174,7 +177,12 @@ def event_dungeon_modify_stat(this, stat_id: int, delta: int, char_id: str = Non
     if stat_id == 4:
         new_value = min(1000, new_value)
     
-    return event_dungeon_set_stat(this, stat_id, new_value, char_id)
+    # 应用同行属性效果
+    from events.地牢相关.同行属性判定 import event_apply_companion_effects
+    final_value = event_apply_companion_effects(this, char_id, stat_id, new_value)
+    
+    # 设置属性值
+    return event_dungeon_set_stat(this, stat_id, final_value, char_id)
 
 
 def event_dungeon_get_all_stats(this, char_id: str = None) -> Dict[int, int]:
@@ -183,13 +191,13 @@ def event_dungeon_get_all_stats(this, char_id: str = None) -> Dict[int, int]:
     
     参数:
         this: 事件上下文对象
-        char_id: 角色ID，如果为None则使用当前目标角色
+        char_id: 角色ID，如果为None则使用当前选择的目标角色
     
     返回:
         所有地牢属性字典
     """
     if char_id is None:
-        char_id = this.kojo.TARGET
+        char_id = this.console.init.charaters_key.get('0', {}).get('选择对象', '0')
     
     # 确保地牢属性已初始化
     if 'dungeon_stats' not in this.console.allstate:
@@ -207,10 +215,10 @@ def event_dungeon_reset_stats(this, char_id: str = None) -> None:
     
     参数:
         this: 事件上下文对象
-        char_id: 角色ID，如果为None则使用当前目标角色
+        char_id: 角色ID，如果为None则使用当前选择的目标角色
     """
     if char_id is None:
-        char_id = this.kojo.TARGET
+        char_id = this.console.init.charaters_key.get('0', {}).get('选择对象', '0')
     
     # 清除地牢属性
     if 'dungeon_stats' in this.console.allstate:
@@ -231,7 +239,7 @@ def event_dungeon_check_stat(this, stat_id: int, threshold: int, char_id: str = 
         this: 事件上下文对象
         stat_id: 地牢属性ID
         threshold: 阈值
-        char_id: 角色ID，如果为None则使用当前目标角色
+        char_id: 角色ID，如果为None则使用当前选择的目标角色
     
     返回:
         如果属性值 >= 阈值返回True，否则返回False
@@ -248,7 +256,7 @@ def event_dungeon_consume_stat(this, stat_id: int, amount: int, char_id: str = N
         this: 事件上下文对象
         stat_id: 地牢属性ID
         amount: 要消耗的数量
-        char_id: 角色ID，如果为None则使用当前目标角色
+        char_id: 角色ID，如果为None则使用当前选择的目标角色
     
     返回:
         如果消耗成功返回True，属性不足返回False
@@ -270,7 +278,7 @@ def event_dungeon_restore_stat(this, stat_id: int, amount: int, char_id: str = N
         this: 事件上下文对象
         stat_id: 地牢属性ID
         amount: 要恢复的数量
-        char_id: 角色ID，如果为None则使用当前目标角色
+        char_id: 角色ID，如果为None则使用当前选择的目标角色
     
     返回:
         恢复后的属性值
@@ -312,7 +320,7 @@ def event_dungeon_format_stats(this, char_id: str = None) -> str:
     
     参数:
         this: 事件上下文对象
-        char_id: 角色ID，如果为None则使用当前目标角色
+        char_id: 角色ID，如果为None则使用当前选择的目标角色
     
     返回:
         格式化的属性字符串

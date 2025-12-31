@@ -8,6 +8,7 @@
 """
 
 from typing import Dict, List, Tuple
+from ERAconsole import EraKojoHandler
 
 
 def event_check_companion_attributes(this, char_id: str = None) -> List[int]:
@@ -21,24 +22,27 @@ def event_check_companion_attributes(this, char_id: str = None) -> List[int]:
     返回:
         属性ID列表
     """
+    # 创建EraKojoHandler实例以访问角色信息
+    kojo = EraKojoHandler(this.console)
+    
     if char_id is None:
-        char_id = this.kojo.TARGET
+        char_id = this.console.init.charaters_key.get('0', {}).get('选择对象', '0')
     
     companion_attributes = []
     
     # 检查ASSI（助手列表）中的角色
     # ASSI是EraKojoHandler提供的属性，返回助手ID列表
-    if not hasattr(this.kojo, 'ASSI') or not this.kojo.ASSI:
+    if not hasattr(kojo, 'ASSI') or not kojo.ASSI:
         return companion_attributes
     
-    for companion_id in this.kojo.ASSI:
+    for companion_id in kojo.ASSI:
         if companion_id == char_id:
             continue  # 跳过自己
         
         # 获取同伴角色的信息
         # 这里简化处理，实际应该从角色的口上或特殊标记读取同行属性
-        companion_name = this.kojo.NAME if this.kojo.TARGET == companion_id else \
-                       this.kojo.BASE[companion_id].get('名前', '')
+        companion_name = kojo.NAME if kojo.TARGET == companion_id else \
+                       kojo.BASE.get(companion_id, {}).get('名前', '')
         
         # 根据角色名称判定同行属性
         if '恋' in companion_name or '古明地恋' in companion_name:
@@ -102,8 +106,11 @@ def event_has_companion_attribute(this, attribute_id: int, char_id: str = None) 
     返回:
         如果拥有该属性返回True，否则返回False
     """
+    # 创建EraKojoHandler实例以访问角色信息
+    kojo = EraKojoHandler(this.console)
+    
     if char_id is None:
-        char_id = this.kojo.TARGET
+        char_id = this.console.init.charaters_key.get('0', {}).get('选择对象', '0')
     
     companion_attributes = event_check_companion_attributes(this, char_id)
     return attribute_id in companion_attributes
@@ -120,8 +127,11 @@ def event_get_crit_bonus(this, char_id: str = None) -> int:
     返回:
         暴击率加成（百分比）
     """
+    # 创建EraKojoHandler实例以访问角色信息
+    kojo = EraKojoHandler(this.console)
+    
     if char_id is None:
-        char_id = this.kojo.TARGET
+        char_id = this.console.init.charaters_key.get('0', {}).get('选择对象', '0')
     
     # 检查是否有心路爆破属性
     if event_has_companion_attribute(this, 22, char_id):
@@ -141,8 +151,11 @@ def event_can_ignore_passive_battle(this, char_id: str = None) -> bool:
     返回:
         如果可以无视返回True，否则返回False
     """
+    # 创建EraKojoHandler实例以访问角色信息
+    kojo = EraKojoHandler(this.console)
+    
     if char_id is None:
-        char_id = this.kojo.TARGET
+        char_id = this.console.init.charaters_key.get('0', {}).get('选择对象', '0')
     
     # 检查是否有无意识属性
     if event_has_companion_attribute(this, 20, char_id):

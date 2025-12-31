@@ -11,7 +11,7 @@
 from utils.era_handler import EraKojoHandler
 from .地牢数值化 import event_dungeon_get_stat
 from .异常状态处理 import event_abnormal_add, event_abnormal_apply_end_effects
-from 珠计算 import add_pleasure_palam, get_palam_info
+from events.珠计算 import add_pleasure_palam, get_palam_info
 
 
 # ========================
@@ -25,21 +25,27 @@ def event_battle_initialize(this, monster_data, chara_id=None):
     参数:
         this: 事件上下文
         monster_data: 怪物数据字典
-        chara_id: 参与战斗的角色ID，默认为TARGET
+        chara_id: 参与战斗的角色ID，默认为当前选择的目标角色
     
     返回:
         bool: 初始化是否成功
     """
     # 确定参与战斗的角色
     if chara_id is None:
-        chara_id = this.kojo.TARGET
+        # 从当前选择的目标角色获取
+        chara_id = this.console.init.charaters_key.get('0', {}).get('选择对象', '0')
     
     # 初始化战斗状态存储在全局
     if 'dungeon_battle' not in this.console.allstate:
         this.console.allstate['dungeon_battle'] = {}
     
+    # 创建kojo上下文用于获取ASSI等信息
+    from utils.era_handler import EraKojoHandler
+    context = {'TARGET': chara_id}
+    kojo = EraKojoHandler(this.console, context)
+    
     # 获取同行角色（助手）
-    assi_list = this.kojo.ASSI if this.kojo.ASSI else []
+    assi_list = kojo.ASSI if kojo.ASSI else []
     
     # 构建战斗状态
     battle_state = {
@@ -79,13 +85,13 @@ def event_battle_get_state(this, chara_id=None):
     获取战斗状态
     
     参数:
-        chara_id: 角色ID，默认为TARGET
+        chara_id: 角色ID，默认为当前选择的目标角色
     
     返回:
         dict: 战斗状态，如果不存在则返回None
     """
     if chara_id is None:
-        chara_id = this.kojo.TARGET
+        chara_id = this.console.init.charaters_key.get('0', {}).get('选择对象', '0')
     
     return this.console.allstate.get('dungeon_battle', {}).get(chara_id)
 
@@ -95,10 +101,10 @@ def event_battle_end(this, chara_id=None):
     结束战斗，清除战斗状态
     
     参数:
-        chara_id: 角色ID，默认为TARGET
+        chara_id: 角色ID，默认为当前选择的目标角色
     """
     if chara_id is None:
-        chara_id = this.kojo.TARGET
+        chara_id = this.console.init.charaters_key.get('0', {}).get('选择对象', '0')
     
     battle_state = event_battle_get_state(this, chara_id)
     if battle_state:
@@ -116,13 +122,13 @@ def event_battle_player_attack(this, skill_id=None, chara_id=None):
     
     参数:
         skill_id: 使用的技能ID，None表示普通攻击
-        chara_id: 攻击者的角色ID，默认为TARGET
+        chara_id: 攻击者的角色ID，默认为当前选择的目标角色
     
     返回:
         dict: 攻击结果
     """
     if chara_id is None:
-        chara_id = this.kojo.TARGET
+        chara_id = this.console.init.charaters_key.get('0', {}).get('选择对象', '0')
     
     battle_state = event_battle_get_state(this, chara_id)
     if not battle_state:
@@ -181,13 +187,13 @@ def event_battle_monster_attack(this, chara_id=None):
     怪物攻击角色（造成情欲值增加）
     
     参数:
-        chara_id: 被攻击的角色ID，默认为TARGET
+        chara_id: 被攻击的角色ID，默认为当前选择的目标角色
     
     返回:
         dict: 攻击结果
     """
     if chara_id is None:
-        chara_id = this.kojo.TARGET
+        chara_id = this.console.init.charaters_key.get('0', {}).get('选择对象', '0')
     
     battle_state = event_battle_get_state(this, chara_id)
     if not battle_state:
@@ -255,7 +261,7 @@ def event_battle_monster_ai(this, chara_id=None):
         str: 使用的技能ID，None表示普通攻击
     """
     if chara_id is None:
-        chara_id = this.kojo.TARGET
+        chara_id = this.console.init.charaters_key.get('0', {}).get('选择对象', '0')
     
     battle_state = event_battle_get_state(this, chara_id)
     if not battle_state:
@@ -282,13 +288,13 @@ def event_battle_next_turn(this, chara_id=None):
     进入下一回合
     
     参数:
-        chara_id: 角色ID，默认为TARGET
+        chara_id: 角色ID，默认为当前选择的目标角色
     
     返回:
         dict: 新回合状态
     """
     if chara_id is None:
-        chara_id = this.kojo.TARGET
+        chara_id = this.console.init.charaters_key.get('0', {}).get('选择对象', '0')
     
     battle_state = event_battle_get_state(this, chara_id)
     if not battle_state:
@@ -316,7 +322,7 @@ def event_battle_check_end_condition(this, chara_id=None):
     检查战斗是否结束
     
     参数:
-        chara_id: 角色ID，默认为TARGET
+        chara_id: 角色ID，默认为当前选择的目标角色
     
     返回:
         dict: {
@@ -325,7 +331,7 @@ def event_battle_check_end_condition(this, chara_id=None):
         }
     """
     if chara_id is None:
-        chara_id = this.kojo.TARGET
+        chara_id = this.console.init.charaters_key.get('0', {}).get('选择对象', '0')
     
     battle_state = event_battle_get_state(this, chara_id)
     if not battle_state:
@@ -366,13 +372,13 @@ def event_dungeon_battle_main(this, monster_data, chara_id=None):
     
     参数:
         monster_data: 怪物数据字典
-        chara_id: 参与战斗的角色ID，默认为TARGET
+        chara_id: 参与战斗的角色ID，默认为当前选择的目标角色
     
     返回:
         str: 战斗结果 'victory'/'defeat'/None（战斗未完成）
     """
     if chara_id is None:
-        chara_id = this.kojo.TARGET
+        chara_id = this.console.init.charaters_key.get('0', {}).get('选择对象', '0')
     
     # 初始化战斗
     event_battle_initialize(this, monster_data, chara_id)
@@ -455,13 +461,13 @@ def event_dungeon_passive_encounter(this, room_data, chara_id=None):
     
     参数:
         room_data: 房间数据（包含monster字段）
-        chara_id: 角色ID，默认为TARGET
+        chara_id: 角色ID，默认为当前选择的目标角色
     
     返回:
         str: 战斗结果 'victory'/'defeat'/None
     """
     if chara_id is None:
-        chara_id = this.kojo.TARGET
+        chara_id = this.console.init.charaters_key.get('0', {}).get('选择对象', '0')
     
     # 检查房间是否有怪物
     if not room_data.get('monster'):
@@ -501,13 +507,13 @@ def event_dungeon_active_attack(this, monster_data, chara_id=None):
     
     参数:
         monster_data: 怪物数据字典
-        chara_id: 角色ID，默认为TARGET
+        chara_id: 角色ID，默认为当前选择的目标角色
     
     返回:
         str: 战斗结果 'victory'/'defeat'/None
     """
     if chara_id is None:
-        chara_id = this.kojo.TARGET
+        chara_id = this.console.init.charaters_key.get('0', {}).get('选择对象', '0')
     
     this.console.PRINT(f"你主动向 {monster_data['name']} 发起了攻击！", colors=(255, 255, 100))
     return event_dungeon_battle_main(this, monster_data, chara_id)
@@ -522,13 +528,13 @@ def event_battle_victory_rewards(this, chara_id=None):
     战斗胜利结算（掉落物品）
     
     参数:
-        chara_id: 角色ID，默认为TARGET
+        chara_id: 角色ID，默认为当前选择的目标角色
     
     返回:
         list: 获得的物品ID列表
     """
     if chara_id is None:
-        chara_id = this.kojo.TARGET
+        chara_id = this.console.init.charaters_key.get('0', {}).get('选择对象', '0')
     
     battle_state = event_battle_get_state(this, chara_id)
     if not battle_state:
@@ -562,13 +568,13 @@ def event_battle_defeat_hscene(this, chara_id=None):
     战斗失败结算（触发H场景）
     
     参数:
-        chara_id: 角色ID，默认为TARGET
+        chara_id: 角色ID，默认为当前选择的目标角色
     
     返回:
         bool: 是否成功处理H场景
     """
     if chara_id is None:
-        chara_id = this.kojo.TARGET
+        chara_id = this.console.init.charaters_key.get('0', {}).get('选择对象', '0')
     
     battle_state = event_battle_get_state(this, chara_id)
     if not battle_state:

@@ -181,10 +181,10 @@ def event_强制移动(this, chara_id, big_map, small_map):
     # 执行时间扣除
     if time_cost_minutes > 0:
         # 调用时间控制事件增加时间
-        this.trigger_event('time_control', operation='add', minutes=time_cost_minutes)
+        this.event_manager.trigger_event('time_control', this, operation='add', minutes=time_cost_minutes)
         
         # 获取当前时间信息用于显示
-        time_info = this.trigger_event('time_control', operation='get', format_type='string')
+        time_info = this.event_manager.trigger_event('time_control', this, operation='get', format_type='string')
 
     # 5. 更新位置 (Update Position)
     this.charater_pwds[chara_id] = {
