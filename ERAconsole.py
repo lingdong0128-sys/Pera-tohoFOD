@@ -86,13 +86,14 @@ class SimpleERAConsole:
         self.cursor_visible = True
         self.cursor_timer = 0
         self.running = True
+        # [限帧修复] Clock 必须复用同一个实例：每帧新建的 Clock 没有上一帧基准，
+        # tick(60) 会立即返回导致循环不限帧（之前 CPU 空转一个核的原因）
+        self.clock = pygame.time.Clock()
 
         # 初始化音乐盒和音乐列表
         self.music_box = None
         self.music_list = {}
         self.current_music_name = None
-        self.clickable_regions = []  # 存储所有可点击区域
-        self.clickable_region_counter = 0  # 可点击区域计数器
 
         # 图片数据相关
         self.image_data = {}  # 图片数据字典，键为"角色ID_图片名"，值为图片信息
@@ -809,7 +810,7 @@ class SimpleERAConsole:
                     self.cursor_timer = 0
                 
                 pygame.display.flip()
-                pygame.time.Clock().tick(60)
+                self.clock.tick(60)
             
             # 确保退出循环时关闭 IME
             pygame.key.stop_text_input()
@@ -893,24 +894,9 @@ class SimpleERAConsole:
                     hint_surface, (self.screen_width - hint_surface.get_width() - 20, 10))
 
     def clear_screen(self):
-        """清屏"""
+        """清屏（[盒子模型] 盒子状态随 clear_history 一并重置，命中矩形由下次重排导出）"""
         self.loader.clear_history()
-        self.loader.clear_clickable_regions()  # 使用加载器的方法
         self.PRINT("控制台已清空", (200, 255, 200))
-
-    def show_scroll_info(self):
-        """显示滚动信息"""
-        scroll_info = self.loader.get_scroll_info()
-        self.PRINT_DIVIDER("=", 40)
-        self.PRINT("滚动信息:", (200, 200, 255))
-        self.PRINT(f"总行数: {scroll_info['total_items']}", (200, 200, 200))
-        self.PRINT(f"可见行数: {scroll_info['visible_items']}", (200, 200, 200))
-        self.PRINT(f"滚动偏移: {scroll_info['scroll_offset']}", (200, 200, 200))
-        self.PRINT(
-            f"是否在顶部: {'是' if scroll_info['at_top'] else '否'}", (200, 200, 200))
-        self.PRINT(
-            f"是否在底部: {'是' if scroll_info['at_bottom'] else '否'}", (200, 200, 200))
-        self.PRINT_DIVIDER("=", 40)
 
     def init_all(self):
         """初始化所有组件，包括数据和音乐"""

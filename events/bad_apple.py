@@ -153,40 +153,36 @@ def event_bad_apple(this):
                 if need_update:
                     # 使用动态加载器的内部方法直接更新显示，而不是清屏
                     this.console.loader.clear_history()  # 只清除历史，不清除缓存
-                    
+
                     # 添加当前帧的每一行
                     for line in curr_lines:
                         this.console.loader.add_text(line, (220, 220, 220))
-                    
-                    # 强制更新显示
-                    this.console.loader._update_current_display()
+
+                    # 强制更新显示（[盒子模型] 置脏，下一 draw 重排）
                     this.console._draw_display()
                     pygame.display.flip()
-                
+
                 last_frame_index = frame_index
-            
+
             # 显示进度信息（只在底部显示，不干扰动画）
             if frame_index % 10 == 0:  # 每10帧更新一次进度
                 progress = f"帧: {frame_index+1}/{total_frames}"
-                # 保存当前显示状态
+                # 保存当前流（[盒子模型] 盒子由流重排得出，无需单独保存）
                 temp_history = this.console.loader.history.copy()
-                temp_display = this.console.loader.current_display.copy()
-                
+
                 # 清除并显示进度
                 this.console.loader.clear_history()
                 ascii_lines = ascii_frame.split('\n')
                 for line in ascii_lines:
                     this.console.loader.add_text(line, (220, 220, 220))
                 this.console.loader.add_text(progress, (150, 150, 255))
-                
-                this.console.loader._update_current_display()
+
                 this.console._draw_display()
                 pygame.display.flip()
-                
-                # 恢复显示状态
+
+                # 恢复显示状态：把流放回去并置脏重排
                 this.console.loader.history = temp_history
-                this.console.loader.current_display = temp_display
-                this.console.loader._update_current_display()
+                this.console.loader.box_dirty = True
             
             # 检查退出事件
             for event in pygame.event.get():

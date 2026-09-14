@@ -150,16 +150,23 @@ class DynamicLoader:
         self.image_surface_cache = {}  # 缓存已渲染的图片Surface
         self.placeholder_color = (100, 100, 150)  # 图片加载前的占位符颜色
         # 内容管理
-        self.history: List[ConsoleContent] = []  # 完整的历史记录
+        self.history: List[ConsoleContent] = []  # 完整的历史记录（盒子模型中的"流"）
         self.max_history_length = 10000  # 最大历史记录数
         self.seq_counter = 0  # [MCP] 内容项单调序号：history 会截断，绝对下标会漂移，seq 是外部读取的稳定游标
-        self.current_display: List[ConsoleContent] = []  # 当前显示的内容
-        self.max_visible_items = 10000  # 最大可见项目数
 
-        # 滚动控制
-        self.scroll_offset = 0  # 滚动偏移（项目数）
+        # [盒子模型] 视口状态：流(history) + 盒子位置(tail_gap) + 盒子缓存
+        # 盒子是唯一被排版/渲染的实体；tail_gap 是盒底之下的流项数，0=在流尾（追更）
+        self.tail_gap = 0
+        self.box_dirty = True          # 三时机才重排：流追加且在流尾 / 盒子移动 / 容量变化
+        self.new_content_below = False  # 回看中来了新内容（右下角提示）
+        self.box_items = []            # [(预渲染surface, y)]，重排时生成
+        self.box_hit_rects = []        # [(rect, click_value)]，重排时按"行坐标+片段坐标"一次算好
+        self._box_line_count = 0       # 盒内项数（滚动条/信息用）
+        self._new_content_hint = None  # "↓ 有新内容"提示的懒渲染缓存
+
+        # 行高与容量
         self.line_height = font.get_linesize()  # 每行高度
-        self.content_area_height = screen_height - input_area_height - 20  # 内容区域高度
+        self.content_area_height = screen_height - input_area_height - 20  # 盒容量（像素）
 
         # 滚动条
         self.scrollbar_width = 10
@@ -171,12 +178,8 @@ class DynamicLoader:
         self.log_file = log_file
         self._init_log_file()
         # 缓存
-        self.text_surface_cache = {}  # 文本surface缓存
-        self.image_cache = OrderedDict()  # 图片缓存
+        self.image_cache = OrderedDict()  # 图片LRU缓存
         self.CACHE_LIMIT = 50  # 限制内存中最多只保留 50 张最近使用的图片
-        self.clickable_regions = []  # 存储所有可点击区域
-        self.clickable_region_counter = 0  # 可点击区域计数器
-        self.active_clickable_regions = []  # 当前显示的可点击区域
 
     def _get_image_from_cache(self, img_path):
         """
@@ -243,28 +246,13 @@ class DynamicLoader:
                 return
 
             # 创建内容项
+            # [盒子模型] 点击矩形不再登记注册表——重排时按"行的盒内y+片段的行内x"直接导出
             item = ConsoleContent(
                 ContentType.TEXT,
                 "",
                 fragments=current_line_fragments,
                 height=self.line_height
             )
-
-            # 注册点击区域
-            for i, fragment in enumerate(current_line_fragments):
-                if fragment.click_value:
-                    item.metadata['clickable'] = True
-                    region_id = self.clickable_region_counter
-
-                    self.clickable_regions.append({
-                        'id': region_id,
-                        'content_item': item,
-                        'fragment_index': i,  # 标记是第几个片段
-                        'click_value': fragment.click_value,
-                        'text': fragment.text,
-                        'type': 'inline_fragment'
-                    })
-                    self.clickable_region_counter += 1
 
             self._append_history(item)
             added_items.append(item)
@@ -368,11 +356,11 @@ class DynamicLoader:
         full_text = ''.join(f.text for f in fragments)
         self._write_to_log(f"[TEXT] {full_text}")
 
-        self._update_current_display()
-
-        # 自动滚动
-        if self.scroll_offset <= 5:
-            self.scroll_to_bottom()
+        # [盒子模型] 在流尾则标脏重排（追更），回看中则提示有新内容
+        if self.tail_gap == 0:
+            self.box_dirty = True
+        else:
+            self.new_content_below = True
 
         return added_items
     # 在DynamicLoader类中添加_parse_params方法
@@ -551,7 +539,10 @@ class DynamicLoader:
                 height=self.line_height
             )
             self._append_history(item)
-            self._update_current_display()
+            if self.tail_gap == 0:
+                self.box_dirty = True
+            else:
+                self.new_content_below = True
             return item
 
         # 解析参数
@@ -586,25 +577,17 @@ class DynamicLoader:
         )
 
         if click_value:
+            # [盒子模型] 只记元数据，命中矩形由重排按图片渲染尺寸导出
             item.metadata['clickable'] = True
-            item.metadata['region_id'] = self.clickable_region_counter
-
-            self.clickable_regions.append({
-                'id': self.clickable_region_counter,
-                'content_item': item,
-                'click_value': click_value,
-                'text': f"[图片] {img_url}",
-                'type': 'image'
-            })
-
-            self.clickable_region_counter += 1
 
         self._append_history(item)
         self._write_to_log(f"[IMAGE] {img_url}")
-        self._update_current_display()
 
-        if self.scroll_offset <= 5:
-            self.scroll_to_bottom()
+        # [盒子模型] 在流尾则标脏重排，回看中则提示有新内容
+        if self.tail_gap == 0:
+            self.box_dirty = True
+        else:
+            self.new_content_below = True
 
         return item
 
@@ -659,145 +642,43 @@ class DynamicLoader:
             }
         )
 
-        # 5. 处理点击区域
+        # 5. 点击标记（[盒子模型] 命中矩形由重排按渲染尺寸导出）
         if click_value:
             item.metadata['clickable'] = True
-            item.metadata['region_id'] = self.clickable_region_counter
-
-            self.clickable_regions.append({
-                'id': self.clickable_region_counter,
-                'content_item': item,
-                'click_value': click_value,
-                'text': f"[图片叠加] {len(img_elements)}张",
-                'type': 'image_stack'
-            })
-
-            self.clickable_region_counter += 1
 
         # 6. 添加到历史记录
         self._append_history(item)
         self._write_to_log(f"[IMAGE_STACK] {len(img_elements)}张图片")
-        self._update_current_display()
 
-        # 7. 滚动到底部
-        if self.scroll_offset <= 5:
-            self.scroll_to_bottom()
+        # 7. [盒子模型] 在流尾则标脏重排，回看中则提示有新内容
+        if self.tail_gap == 0:
+            self.box_dirty = True
+        else:
+            self.new_content_below = True
 
         return item
 
     def set_font(self, font):
         self.font = font
-        self.line_height=font.get_linesize()
+        self.line_height = font.get_linesize()
+        # [盒子模型] 字体变了，盒子需要用新字体重排重渲染
+        self.box_dirty = True
 
     def handle_mouse_click(self, mouse_pos: Tuple[int, int]) -> Optional[str]:
         """
-        处理鼠标点击事件
+        处理鼠标点击事件（[盒子模型] 直接查重排时算好的命中矩形）
 
         Args:
-            mouse_pos: 鼠标位置 (x, y)
+            mouse_pos: 鼠标位置 (x, y)，设计分辨率坐标（SCALED 已自动换算）
 
         Returns:
             点击的文本值，如果没有点击可点击区域则返回None
         """
-        # 更新活动点击区域
-        # self._update_active_clickable_regions()
-
-        # 检查是否点击了任何活动区域
-        for region in self.active_clickable_regions:
-            if region['rect'].collidepoint(mouse_pos):
-                return region['click_value']
+        for rect, click_value in self.box_hit_rects:
+            if rect.collidepoint(mouse_pos):
+                return click_value
 
         return None
-
-    def _update_active_clickable_regions(self):
-        """更新当前显示的可点击区域"""
-        self.active_clickable_regions = []
-        current_y = 10
-
-        # 遍历当前显示的内容项
-        for item in self.current_display:
-            # 检查普通文本点击区域
-            if 'clickable' in item.metadata and item.metadata['clickable']:
-                # 根据项目类型计算区域
-                region_rect = None
-
-                if item.type == ContentType.TEXT:
-                    # 文本区域
-                    text_width = self.font.size(
-                        item.data)[0] if item.data else 0
-                    region_rect = pygame.Rect(
-                        10, current_y, text_width, item.height)
-
-                elif item.type == ContentType.IMAGE:
-                    # 图片区域
-                    if item.data in self.image_cache:
-                        image = self.image_cache[item.data]
-                        img_x = 10  # 图片从左侧开始
-                        region_rect = pygame.Rect(
-                            img_x, current_y, image.get_width(), item.height)
-
-                if region_rect:
-                    # 查找对应的点击区域记录
-                    for region in self.clickable_regions:
-                        if region.get('content_item') == item and region.get('type') in ['text', 'image']:
-                            region['rect'] = region_rect
-                            self.active_clickable_regions.append({
-                                'id': region['id'],
-                                'rect': region_rect,
-                                'click_value': region['click_value'],
-                                'text': region['text'],
-                                'type': region['type']
-                            })
-
-            # 检查行内片段点击区域
-            elif item.fragments:
-                current_x = 10
-
-                for i, fragment in enumerate(item.fragments):
-                    # 计算片段宽度
-                    fragment.calculate_width(self.font)
-
-                    # 检查是否需要换行
-                    available_width = self.screen_width - current_x - 20
-                    if fragment.width > available_width and current_x > 10:
-                        current_x = 10
-                        current_y += item.height
-
-                    # 如果是可点击片段
-                    if fragment.click_value:
-                        region_rect = pygame.Rect(
-                            current_x, current_y, fragment.width, item.height)
-
-                        # 查找对应的点击区域记录
-                        for region in self.clickable_regions:
-                            if (region.get('content_item') == item and
-                                region.get('fragment_index') == i and
-                                    region.get('type') == 'inline_fragment'):
-                                region['rect'] = region_rect
-                                self.active_clickable_regions.append({
-                                    'id': region['id'],
-                                    'rect': region_rect,
-                                    'click_value': region['click_value'],
-                                    'text': region['text'],
-                                    'type': region['type']
-                                })
-
-                    current_x += fragment.width
-
-                # 一行绘制完毕，换行
-                if item.fragments:
-                    current_y += item.height
-            else:
-                # 更新Y位置
-                current_y += item.height
-
-    def clear_clickable_regions(self):
-        """清空所有可点击区域"""
-        self.clickable_regions = []
-        self.active_clickable_regions = []
-        self.clickable_region_counter = 0
-
-        # 清空历史记录中所有内容的点击元数据
 
     def _init_log_file(self):
         """初始化日志文件"""
@@ -835,11 +716,12 @@ class DynamicLoader:
             self._append_history(item)
             self._write_to_log("")
             added_items.append(item)
-            self._update_current_display()
 
-            # 自动滚动到底部（如果已经在底部附近）
-            if self.scroll_offset <= 5:
-                self.scroll_to_bottom()
+            # [盒子模型] 在流尾则标脏重排，回看中则提示有新内容
+            if self.tail_gap == 0:
+                self.box_dirty = True
+            else:
+                self.new_content_below = True
 
             return added_items
 
@@ -889,12 +771,11 @@ class DynamicLoader:
         if len(self.history) > self.max_history_length:
             self.history = self.history[-self.max_history_length:]
 
-        # 更新当前显示
-        self._update_current_display()
-
-        # 自动滚动到底部（如果已经在底部附近）
-        if self.scroll_offset <= 5:
-            self.scroll_to_bottom()
+        # [盒子模型] 在流尾则标脏重排，回看中则提示有新内容
+        if self.tail_gap == 0:
+            self.box_dirty = True
+        else:
+            self.new_content_below = True
 
         return added_items
 
@@ -912,7 +793,10 @@ class DynamicLoader:
                               divider_text, color, self.line_height)
         self._append_history(item)
         self._write_to_log(divider_text)
-        self._update_current_display()
+        if self.tail_gap == 0:
+            self.box_dirty = True
+        else:
+            self.new_content_below = True
         return item
 
     def add_menu(self, items: List[str], color: Tuple[int, int, int] = (200, 200, 255)):
@@ -931,7 +815,10 @@ class DynamicLoader:
             self._write_to_log(item)
             added_items.append(content_item)
 
-        self._update_current_display()
+        if self.tail_gap == 0:
+            self.box_dirty = True
+        else:
+            self.new_content_below = True
         return added_items
 
     def _write_to_log(self, text: str):
@@ -943,395 +830,336 @@ class DynamicLoader:
         except Exception as e:
             print(f"写入日志失败: {e}")
 
-    def _update_current_display(self):
-        """更新当前显示的内容（根据滚动偏移）"""
-        # 清空当前显示
-        self.current_display = []
+    def _compose_box(self):
+        """
+        [盒子模型] 重排盒子：唯一被排版/渲染的实体。
+        盒底锚定在 history[len-1-tail_gap]，向更旧方向按像素容量贪心装填；
+        装不下且盒非空 → 该项属于更老的盒位（图片不可切分由此天然成立）。
+        重排时预渲染每项 surface，并按"行的盒内y + 片段的行内x"一次算好命中矩形。
+        只在三种时机被触发：流追加且在流尾 / 盒子移动 / 容量变化。
+        """
+        self.box_dirty = False
+        self.box_items = []      # [(surface, y)]
+        self.box_hit_rects = []  # [(rect, click_value)]
+        self._box_line_count = 0
 
-        # 如果历史记录为空，直接返回
         if not self.history:
+            self.scrollbar_visible = False
             return
 
-        # 计算起始索引
-        # scroll_offset 表示跳过的最新项目数
-        start_index = max(0, len(self.history) - 1 - self.scroll_offset)
+        # 钳位盒底锚点（流被清空/缩短时的兜底）
+        max_gap = len(self.history) - 1
+        if self.tail_gap > max_gap:
+            self.tail_gap = max_gap
+        bottom_idx = len(self.history) - 1 - self.tail_gap
 
-        # 从起始索引开始向前（向历史方向）显示
-        available_height = self.content_area_height
-        current_height = 0
+        TOP_PAD = 10  # 与旧渲染的顶部边距保持一致
+        capacity = self.content_area_height
 
-        for i in range(start_index, -1, -1):
-            item = self.history[i]
-            if current_height + item.height <= available_height:
-                self.current_display.insert(0, item)  # 保持顺序
-                current_height += item.height
-            else:
-                break
+        # 1. 自盒底向更旧方向贪心装填（按像素容量）
+        packed = []  # [(item, y)]  y 为屏幕上的最终纵坐标
+        used = 0
+        idx = bottom_idx
+        while idx >= 0:
+            item = self.history[idx]
+            h = item.height if item.height > 0 else self.line_height
+            if h > capacity:
+                h = capacity  # 单项超过整盒：钳制到盒高
+            if used + h > capacity and packed:
+                break  # 装不下：属于更老的盒位，等盒子移过去再进来（不切分）
+            packed.append((item, TOP_PAD + capacity - used - h))
+            used += h
+            idx -= 1
+        packed.reverse()  # 恢复从旧到新的显示顺序
+        self._box_line_count = len(packed)
 
-        # 如果显示区域还有空间，尝试向后（向最新方向）显示
-        # 这样可以确保显示区域总是填满
-        if current_height < available_height and start_index < len(self.history) - 1:
-            for i in range(start_index + 1, len(self.history)):
-                item = self.history[i]
-                if current_height + item.height <= available_height:
-                    self.current_display.append(item)  # 添加到末尾
-                    current_height += item.height
+        # 2. 逐项预渲染 surface + 命中矩形
+        max_w = max(1, self.screen_width - 20)
+        for item, y in packed:
+            surface, _content_w = self._render_item_surface(item, max_w)
+            if surface is None:
+                continue
+
+            # 单项渲染结果比盒容量还高（巨图钳制）
+            if surface.get_height() > capacity:
+                ratio = capacity / surface.get_height()
+                surface = pygame.transform.smoothscale(
+                    surface, (max(1, int(surface.get_width() * ratio)), capacity))
+
+            self.box_items.append((surface, y))
+
+            # --- 命中矩形：行的盒内 y + 片段在行内的 x 累计导出 ---
+            if item.type == ContentType.TEXT and item.fragments:
+                x = 10
+                for frag in item.fragments:
+                    if frag.width == 0:
+                        frag.calculate_width(self.font)
+                    if frag.click_value:
+                        self.box_hit_rects.append((
+                            pygame.Rect(x, y, max(frag.width, 1), max(item.height, 1)),
+                            frag.click_value))
+                    x += frag.width
+            elif item.metadata.get('clickable'):
+                click_value = item.metadata.get('click_value') or item.metadata.get('global_click')
+                if click_value:
+                    self.box_hit_rects.append((
+                        pygame.Rect(10, y, surface.get_width(), surface.get_height()),
+                        click_value))
+
+        # 3. 滚动条可见性：盒外还有内容（盒顶之上或盒底之下）
+        self.scrollbar_visible = len(self.history) > self._box_line_count
+
+    def _render_item_surface(self, item, max_w):
+        """
+        [盒子模型] 重排时把单个内容项渲染成 surface。
+        返回 (surface, 内容宽度)；渲染失败返回 (None, 0)。
+        draw() 从此零 font.render、零 smoothscale。
+        """
+        try:
+            if item.type == ContentType.TEXT:
+                # 文本行：fragment 逐个渲染到透明条上（含行内图片标记）
+                height = max(item.height, 1)
+                # 行内图片可能比记录行高更高，按实际内容撑高
+                for frag in item.fragments:
+                    if frag.is_image_mark and frag.width == 0:
+                        frag.calculate_width(self.font)
+                for frag in item.fragments:
+                    if frag.is_image_mark:
+                        img = frag.render_image()
+                        if img and img.get_height() > height:
+                            height = img.get_height()
+
+                surface = pygame.Surface((max_w, height), pygame.SRCALPHA)
+                x = 0
+                for frag in item.fragments:
+                    if frag.width == 0:
+                        frag.calculate_width(self.font)
+                    if frag.is_image_mark:
+                        img = frag.render_image()
+                        if img:
+                            surface.blit(img, (x, 0))
+                        else:
+                            # 图片加载失败：占位符
+                            pygame.draw.rect(surface, self.placeholder_color,
+                                             (x, 0, max(frag.width, 1), height - 2))
+                        x += frag.width
+                    else:
+                        text_surface = self.font.render(frag.text, True, frag.color)
+                        surface.blit(text_surface,
+                                     (x, (height - text_surface.get_height()) // 2))
+                        x += frag.width
+                return surface, x
+
+            elif item.type == ContentType.IMAGE_MARK:
+                img = self._render_image_mark_surface(item)
+                if img is None:
+                    img = self._placeholder_surface(270, max(item.height - 10, 10))
+                return img, img.get_width()
+
+            elif item.type == ContentType.IMAGE_STACK:
+                img = self._render_image_stack_surface(item)
+                if img is None:
+                    img = self._placeholder_surface(270, max(item.height - 10, 10))
+                return img, img.get_width()
+
+            elif item.type == ContentType.IMAGE:
+                # 旧图片类型（向后兼容）
+                img = self._get_image_from_cache(item.data)
+                if img is not None:
+                    return img, img.get_width()
+                return None, 0
+
+            else:  # DIVIDER / MENU
+                text_surface = self.font.render(item.data, True, item.color)
+                surface = pygame.Surface((max_w, max(item.height, 1)), pygame.SRCALPHA)
+                ty = (max(item.height, 1) - text_surface.get_height()) // 2
+                if item.type == ContentType.DIVIDER:
+                    surface.blit(text_surface,
+                                 ((max_w - text_surface.get_width()) // 2, ty))
                 else:
-                    break
+                    surface.blit(text_surface, (10, ty))
+                return surface, text_surface.get_width()
 
-        # 更新滚动条可见性
-        total_height = sum(item.height for item in self.history)
-        self.scrollbar_visible = total_height > self.content_area_height
+        except Exception as e:
+            print(f"盒内项渲染失败: {e}")
+            return None, 0
 
-    def scroll_up(self, amount: int = 1):
-        """向上滚动（查看更旧的内容）"""
-        # 最大滚动偏移是历史记录总数减1
-        max_scroll = max(0, len(self.history) - 1)
-        self.scroll_offset = min(max_scroll, self.scroll_offset + amount)
-        self._update_current_display()
+    def _render_image_mark_surface(self, item):
+        """[盒子模型] 单张图片标记 → surface（LRU缓存+裁剪+按size缩放，重排时跑一次）"""
+        metadata = item.metadata
+        img_url = metadata.get('img_url')
+        img_info = metadata.get('img_info')
 
-    def scroll_down(self, amount: int = 1):
-        """向下滚动（查看更新的内容）"""
-        self.scroll_offset = max(0, self.scroll_offset - amount)
-        self._update_current_display()
+        if not img_url or not img_info:
+            return None
 
-    def scroll_to_bottom(self):
-        """滚动到底部 - 显示最新的内容"""
-        self.scroll_offset = 0
-        self._update_current_display()
+        image = self._get_image_from_cache(img_info.get('path'))
+        if not image:
+            return None
 
-    def scroll_to_top(self):
-        """滚动到顶部 - 显示最旧的内容"""
-        # 设置滚动偏移为最大值
-        self.scroll_offset = max(0, len(self.history) - 1)
-        self._update_current_display()
+        # 裁剪：优先 PRINTIMG 传入的 clip 参数，其次 CSV 默认值
+        param_clip = metadata.get('clip_pos')
+        if param_clip:
+            clip_x, clip_y = param_clip
+        else:
+            clip_x = img_info.get('clip_x', 0)
+            clip_y = img_info.get('clip_y', 0)
 
-    def clear_history(self):
-        """清空历史记录"""
-        self.history = []
-        self.current_display = []
-        self.scroll_offset = 0
-        self.image_cache = OrderedDict()
-        self.clickable_regions = []
-        self.active_clickable_regions = []
-        self.clickable_region_counter = 0
-        # 在日志中记录清空操作
-        self._write_to_log("[系统] 历史记录已清空")
+        clip_w = img_info.get('original_width', image.get_width())
+        clip_h = img_info.get('original_height', image.get_height())
 
-    # dynamic_loader.py - 添加 _render_and_draw_image_stack 方法
+        img_w, img_h = image.get_size()
+        needs_crop = (clip_x > 0 or clip_y > 0 or clip_w < img_w or clip_h < img_h)
 
-    def _render_and_draw_image_stack(self, screen, item, x, y):
-        """渲染图片叠加 - 支持等比缩放 (LRU缓存+实时合成+修复裁剪+修复点击)"""
+        if needs_crop:
+            safe_w = min(clip_w, img_w - clip_x)
+            safe_h = min(clip_h, img_h - clip_y)
+            if safe_w > 0 and safe_h > 0:
+                image = image.subsurface(pygame.Rect(clip_x, clip_y, safe_w, safe_h))
+
+        # 指定了 size 才缩放（设计分辨率坐标）
+        size = metadata.get('size')
+        if size:
+            final_width, final_height = size
+            if final_width > 0 and final_height > 0 and (final_width, final_height) != image.get_size():
+                image = pygame.transform.smoothscale(image, (final_width, final_height))
+
+        return image
+
+    def _render_image_stack_surface(self, item):
+        """[盒子模型] 图片叠加 → 合成 surface（重排时合成一次，不再每帧重建）"""
         metadata = item.metadata
 
-        # 获取模板尺寸（设计分辨率坐标，默认值见 _add_image_stack_mark）
         template_width = metadata.get('template_width', self.screen_width - 20)
         template_height = metadata.get('template_height', 300)
-        
-        img_elements = metadata.get('img_elements', [])
 
+        img_elements = metadata.get('img_elements', [])
         if not img_elements:
-            self._draw_image_error(screen, x, y, template_height)
             return None
 
         try:
-            # 创建透明画布 (每帧实时创建，开销很小，Python GC 会自动回收)
             final_surface = pygame.Surface(
-                (template_width, template_height), pygame.SRCALPHA)
+                (max(template_width, 1), max(template_height, 1)), pygame.SRCALPHA)
 
             for element in img_elements:
                 info = element['info']
                 img_path = info.get('path')
 
-                # 1. [LRU] 从缓存获取原始图片 (不要修改这个对象!)
+                # 1. [LRU] 从缓存获取原始图片（不要修改缓存里的对象!）
                 image = self._get_image_from_cache(img_path)
                 if not image:
                     continue
 
-                # 2. [裁剪] 获取参数并判断是否需要裁剪
+                # 2. [裁剪] 定义区域与原图不一致时裁剪
                 csv_x = info.get('clip_x', 0)
                 csv_y = info.get('clip_y', 0)
                 csv_w = info.get('original_width', image.get_width())
                 csv_h = info.get('original_height', image.get_height())
                 img_w, img_h = image.get_size()
 
-                # 判断逻辑：只要定义的区域跟原图尺寸不一样，或者起始点不在(0,0)，就裁剪
-                needs_crop = (csv_x > 0 or csv_y > 0 or csv_w <
-                              img_w or csv_h < img_h)
-
+                needs_crop = (csv_x > 0 or csv_y > 0 or csv_w < img_w or csv_h < img_h)
                 if needs_crop:
                     safe_w = min(csv_w, img_w - csv_x)
                     safe_h = min(csv_h, img_h - csv_y)
-
                     if safe_w > 0 and safe_h > 0:
-                        # subsurface 是共享内存引用，速度极快
                         image = image.subsurface(
                             pygame.Rect(csv_x, csv_y, safe_w, safe_h))
 
-                # 3. [缩放] CSV/参数定义了目标尺寸时缩放到目标（设计分辨率坐标）
+                # 3. [缩放] 定义了目标尺寸时缩放（设计分辨率坐标）
                 target_w = info.get('target_width', image.get_width())
                 target_h = info.get('target_height', image.get_height())
                 if target_w > 0 and target_h > 0 and (target_w, target_h) != image.get_size():
                     image = pygame.transform.smoothscale(image, (target_w, target_h))
 
                 # 4. [偏移并绘制]
-                offset_x = info.get('offset_x', 0)
-                offset_y = info.get('offset_y', 0)
-                final_surface.blit(image, (offset_x, offset_y))
-
-            # 绘制最终结果到屏幕
-            screen.blit(final_surface, (x, y))
-
-            # 5. [点击区域] 更新并加入活跃列表
-            if metadata.get('clickable'):
-                rect = pygame.Rect(x, y, template_width, template_height)
-
-                for region in self.clickable_regions:
-                    if region.get('content_item') == item:
-                        # 更新永久记录
-                        region['rect'] = rect
-                        # 加入当前帧活跃列表
-                        self.active_clickable_regions.append({
-                            'id': region['id'],
-                            'rect': rect,
-                            'click_value': region['click_value'],
-                            'text': region.get('text', ''),
-                            'type': region.get('type', 'image_stack')
-                        })
+                final_surface.blit(image,
+                                   (info.get('offset_x', 0), info.get('offset_y', 0)))
 
             return final_surface
 
         except Exception as e:
             print(f"渲染图片叠加失败: {e}")
-            self._draw_image_error(screen, x, y, template_height)
             return None
-    # dynamic_loader.py - 修改 draw 方法
+
+    def _placeholder_surface(self, w, h, mark="?"):
+        """图片渲染失败的占位 surface"""
+        surface = pygame.Surface((max(w, 1), max(h, 1)), pygame.SRCALPHA)
+        surface.fill(self.placeholder_color)
+        text = self.font.render(mark, True, (255, 200, 100))
+        surface.blit(text, ((surface.get_width() - text.get_width()) // 2,
+                            (surface.get_height() - text.get_height()) // 2))
+        return surface
+
+    def scroll_up(self, amount: int = 1):
+        """向上滚动（查看更旧内容）：盒子沿流向旧侧移动"""
+        max_gap = max(0, len(self.history) - 1)
+        if self.tail_gap < max_gap:
+            self.tail_gap = min(max_gap, self.tail_gap + amount)
+            self.box_dirty = True
+
+    def scroll_down(self, amount: int = 1):
+        """向下滚动（查看更新内容）：盒子沿流向新侧移动，回到流尾即恢复追更"""
+        if self.tail_gap > 0:
+            self.tail_gap = max(0, self.tail_gap - amount)
+            self.box_dirty = True
+            if self.tail_gap == 0:
+                self.new_content_below = False
+
+    def scroll_to_bottom(self):
+        """滚动到底部 - 回到流尾（追更状态）"""
+        self.tail_gap = 0
+        self.new_content_below = False
+        self.box_dirty = True
+
+    def scroll_to_top(self):
+        """滚动到顶部 - 盒子移到流的最旧端"""
+        self.tail_gap = max(0, len(self.history) - 1)
+        self.box_dirty = True
+
+    def clear_history(self):
+        """清空历史（流）并重置盒子"""
+        self.history = []
+        self.tail_gap = 0
+        self.new_content_below = False
+        self.image_cache = OrderedDict()
+        self.box_dirty = True
+        # 在日志中记录清空操作
+        self._write_to_log("[系统] 历史记录已清空")
+
+    # dynamic_loader.py - 盒子模型的 draw
 
     def draw(self, screen: pygame.Surface):
-        """绘制内容到屏幕 - 增强版，支持图片标记和图片叠加渲染"""
-        self._update_active_clickable_regions()
-        current_y = 10
+        """
+        [盒子模型] 绘制：盒脏才重排，帧内纯 blit 预渲染 surface。
+        零 font.render、零 smoothscale、零逐帧命中重算。
+        """
+        if self.box_dirty:
+            self._compose_box()
 
-        # 绘制可见内容
-        for item in self.current_display:
-            if current_y + item.height > self.content_area_height + 10:
-                break
+        for surface, y in self.box_items:
+            screen.blit(surface, (10, y))
 
-            if item.type == ContentType.TEXT:
-                current_x = 10
+        # 回看中来了新内容：右下角提示（懒渲染一次，不逐帧渲染文字）
+        if self.new_content_below and self.tail_gap > 0:
+            if self._new_content_hint is None:
+                text = self.font.render("↓ 有新内容", True, (100, 200, 255))
+                hint = pygame.Surface((text.get_width() + 8, text.get_height() + 4),
+                                      pygame.SRCALPHA)
+                hint.blit(text, (4, 2))
+                self._new_content_hint = hint
+            screen.blit(self._new_content_hint,
+                        (self.screen_width - self._new_content_hint.get_width() - 15,
+                         10 + self.content_area_height - self._new_content_hint.get_height() - 5))
 
-                # 如果有行内片段，逐个绘制
-                if item.fragments:
-                    # 需要先计算这行的基线位置（考虑图片高度）
-                    max_height_in_line = item.height - 10  # 减去边距
-
-                    for fragment in item.fragments:
-                       # 计算宽度 (现在不需要在 draw 里计算了，前面已经算过了，但为了保险可以保留)
-                        if fragment.width == 0:
-                            fragment.calculate_width(self.font)
-
-                        # 如果是图片标记
-                        if fragment.is_image_mark:
-                            # 渲染图片（设计分辨率坐标）
-                            image = fragment.render_image()
-                            if image:
-                                # 计算图片位置（垂直居中于行高）
-                                img_y = current_y + \
-                                    (max_height_in_line - image.get_height()) // 2
-                                screen.blit(image, (current_x, img_y))
-
-                                # 加入点击区域 (Active)
-                                if fragment.click_value:
-                                    region_rect = pygame.Rect(
-                                        current_x, img_y, image.get_width(), image.get_height())
-                                    # ... 添加到 active_clickable_regions ...
-                                    # (请确保这里复制了之前修复点击的代码)
-                                    self.active_clickable_regions.append({
-                                        # ... 你的 active 列表添加逻辑 ...
-                                        'id': -1,  # id 此时不重要，重要的是 rect 和 value
-                                        'rect': region_rect,
-                                        'click_value': fragment.click_value
-                                    })
-                            else:
-                                # 图片加载失败，绘制占位符
-                                placeholder_rect = pygame.Rect(current_x, current_y,
-                                                               fragment.width,
-                                                               max_height_in_line)
-                                pygame.draw.rect(
-                                    screen, self.placeholder_color, placeholder_rect)
-                                pygame.draw.rect(
-                                    screen, (150, 150, 150), placeholder_rect, 1)
-
-                                # 绘制加载失败文本
-                                error_text = self.font.render(
-                                    "X", True, (255, 100, 100))
-                                screen.blit(
-                                    error_text, (current_x + 5, current_y + 5))
-
-                            current_x += fragment.width
-
-                        else:
-                            # 普通文本
-                            text_surface = self.font.render(
-                                fragment.text, True, fragment.color)
-
-                            # 计算文本基线位置（与图片垂直居中）
-                            text_y = current_y + \
-                                (max_height_in_line - text_surface.get_height()) // 2
-                            screen.blit(text_surface, (current_x, text_y))
-
-                            # 如果有点击功能，添加点击区域
-                            if fragment.click_value:
-                                region_id = self.clickable_region_counter
-                                self.clickable_region_counter += 1
-
-                                region_rect = pygame.Rect(current_x, text_y,
-                                                          text_surface.get_width(),
-                                                          text_surface.get_height())
-
-                                self.active_clickable_regions.append({
-                                    'id': region_id,
-                                    'rect': region_rect,
-                                    'click_value': fragment.click_value,
-                                    'type': 'text'
-                                })
-
-                            current_x += fragment.width
-
-                    # 一行绘制完毕，换行
-                    current_y += item.height
-
-                else:
-                    # 普通文本（没有片段）
-                    text_surface = self.font.render(
-                        item.data, True, item.color)
-                    screen.blit(text_surface, (10, current_y))
-                    current_y += item.height
-
-            elif item.type == ContentType.IMAGE_STACK:  # 新增：处理图片叠加
-                # 渲染图片叠加
-                self._render_and_draw_image_stack(screen, item, 10, current_y)
-                current_y += item.height
-
-            elif item.type == ContentType.IMAGE_MARK:
-                # 渲染图片标记
-                self._render_and_draw_image_mark(screen, item, 10, current_y)
-                current_y += item.height
-
-            elif item.type == ContentType.IMAGE:
-                # 处理旧的图片类型（向后兼容）
-                if item.data in self.image_cache:
-                    image = self.image_cache[item.data]
-                    screen.blit(image, (10, current_y))
-
-                current_y += item.height
-
-            elif item.type == ContentType.DIVIDER:
-                # 绘制分割线
-                text_surface = self.font.render(item.data, True, item.color)
-                text_width = text_surface.get_width()
-                x_pos = (self.screen_width - text_width) // 2
-                screen.blit(text_surface, (x_pos, current_y))
-                current_y += item.height
-
-            elif item.type == ContentType.MENU:
-                # 绘制菜单项
-                text_surface = self.font.render(item.data, True, item.color)
-                screen.blit(text_surface, (20, current_y))
-                current_y += item.height
-
-        # 绘制滚动条（如果需要）
-        if self.scrollbar_visible and len(self.history) > 0:
+        # 绘制滚动条（如果盒外还有内容）
+        if self.scrollbar_visible and self.history:
             self._draw_scrollbar(screen)
 
-    def _render_and_draw_image_mark(self, screen, item, x, y):
-        """渲染并绘制单张图片标记 - 最终优化版"""
-        metadata = item.metadata
-        img_url = metadata.get('img_url')
-        img_info = metadata.get('img_info')
-
-        if not img_url or not img_info:
-            self._draw_image_error(screen, x, y, item.height - 10)
-            return None
-
-        try:
-            # 1. [LRU] 获取图片
-            image = self._get_image_from_cache(img_info.get('path'))
-            if not image:
-                self._draw_image_error(screen, x, y, item.height - 10)
-                return None
-
-            # 2. [裁剪]
-            # 优先使用 PRINTIMG 传入的 clip 参数，其次使用 CSV 默认值
-            param_clip = metadata.get('clip_pos')
-            if param_clip:
-                clip_x, clip_y = param_clip
-            else:
-                clip_x = img_info.get('clip_x', 0)
-                clip_y = img_info.get('clip_y', 0)
-
-            # 宽度/高度通常由 CSV 定义
-            clip_w = img_info.get('original_width', image.get_width())
-            clip_h = img_info.get('original_height', image.get_height())
-
-            img_w, img_h = image.get_size()
-            needs_crop = (clip_x > 0 or clip_y > 0 or clip_w <
-                          img_w or clip_h < img_h)
-
-            if needs_crop:
-                safe_w = min(clip_w, img_w - clip_x)
-                safe_h = min(clip_h, img_h - clip_y)
-                if safe_w > 0 and safe_h > 0:
-                    image = image.subsurface(pygame.Rect(
-                        clip_x, clip_y, safe_w, safe_h))
-
-            # 3. [缩放] 指定了 size 才缩放（设计分辨率坐标）
-            size = metadata.get('size')
-            if size:
-                final_width, final_height = size
-                if final_width > 0 and final_height > 0 and (final_width, final_height) != image.get_size():
-                    image = pygame.transform.smoothscale(image, (final_width, final_height))
-
-            # 绘制
-            screen.blit(image, (x, y))
-
-            # 4. [点击区域]
-            if metadata.get('clickable'):
-                rect = pygame.Rect(x, y, image.get_width(), image.get_height())
-
-                for region in self.clickable_regions:
-                    if region.get('content_item') == item:
-                        region['rect'] = rect
-                        self.active_clickable_regions.append({
-                            'id': region['id'],
-                            'rect': rect,
-                            'click_value': region['click_value'],
-                            'text': region.get('text', ''),
-                            'type': region.get('type', 'image')
-                        })
-
-            return image
-
-        except Exception as e:
-            print(f"渲染图片标记失败 {img_url}: {e}")
-            self._draw_image_error(screen, x, y, item.height - 10)
-            return None
-
-    def _draw_image_error(self, screen, x, y, height):
-        """绘制图片错误指示"""
-        placeholder_rect = pygame.Rect(x, y, 270, height)
-        pygame.draw.rect(screen, (100, 100, 150), placeholder_rect)
-        pygame.draw.rect(screen, (150, 150, 150), placeholder_rect, 1)
-
-        error_text = self.font.render("?", True, (255, 200, 100))
-        text_x = x + (270 - error_text.get_width()) // 2
-        text_y = y + (height - error_text.get_height()) // 2
-        screen.blit(error_text, (text_x, text_y))
-
     def _draw_scrollbar(self, screen: pygame.Surface):
-        """绘制滚动条"""
-        total_height = sum(item.height for item in self.history)
-        visible_ratio = self.content_area_height / total_height
+        """[盒子模型] 滚动条：滑块位置由 tail_gap（盒底之下的项数）决定，纯算术"""
+        total = len(self.history)
+        visible = max(1, self._box_line_count)
+        ratio = min(1.0, visible / total)
 
         # 滚动条轨道
         scrollbar_x = self.screen_width - self.scrollbar_width - 5
@@ -1342,19 +1170,17 @@ class DynamicLoader:
             border_radius=3
         )
 
-        # 滚动条滑块
-        if visible_ratio < 1.0:
-            scrollbar_height = max(
-                20, self.content_area_height * visible_ratio)
-            scrollbar_y = 10 + (self.scroll_offset / len(self.history)) * \
-                (self.content_area_height - scrollbar_height)
+        # 滚动条滑块：tail_gap=0（流尾）在底，最大 gap 在顶
+        scrollbar_height = max(20, self.content_area_height * ratio)
+        frac = self.tail_gap / max(1, total - visible)
+        scrollbar_y = 10 + frac * (self.content_area_height - scrollbar_height)
 
-            pygame.draw.rect(
-                screen,
-                self.scrollbar_active_color,
-                (scrollbar_x, scrollbar_y, self.scrollbar_width, scrollbar_height),
-                border_radius=3
-            )
+        pygame.draw.rect(
+            screen,
+            self.scrollbar_active_color,
+            (scrollbar_x, scrollbar_y, self.scrollbar_width, scrollbar_height),
+            border_radius=3
+        )
 
     def handle_event(self, event: pygame.event.Event):
         """
@@ -1380,10 +1206,11 @@ class DynamicLoader:
                 self.scroll_down(1)
                 return True
             elif event.key == pygame.K_PAGEUP:
-                self.scroll_up(10)
+                # [盒子模型] 整盒翻页：容量能装多少文本行
+                self.scroll_up(max(1, self.content_area_height // self.line_height))
                 return True
             elif event.key == pygame.K_PAGEDOWN:
-                self.scroll_down(10)
+                self.scroll_down(max(1, self.content_area_height // self.line_height))
                 return True
             elif event.key == pygame.K_HOME:
                 self.scroll_to_top()
@@ -1395,20 +1222,16 @@ class DynamicLoader:
         return False
 
     def get_scroll_info(self) -> Dict:
-        """获取滚动信息"""
+        """[盒子模型] 滚动信息（字段兼容 ERAconsole 的滚动位置显示）"""
         total_items = len(self.history)
-        visible_items = len(self.current_display)
-
-        # 计算是否在顶部
-        at_top = False
-        if total_items > 0:
-            total_height = sum(item.height for item in self.history)
-            at_top = total_height > self.content_area_height and self.scroll_offset >= total_items - visible_items
+        visible_items = self._box_line_count
+        at_bottom = self.tail_gap == 0
+        at_top = (not at_bottom) and self.tail_gap >= max(0, total_items - visible_items)
 
         return {
             "total_items": total_items,
             "visible_items": visible_items,
-            "scroll_offset": self.scroll_offset,
+            "scroll_offset": self.tail_gap,
             "at_top": at_top,
-            "at_bottom": self.scroll_offset == 0
+            "at_bottom": at_bottom
         }
