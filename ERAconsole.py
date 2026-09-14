@@ -917,7 +917,7 @@ class SimpleERAConsole:
             self.loader.add_text("角色全部载入~", (100, 255, 100))
 
             # 初始化图片数据字典
-            self.image_data, self.chara_images = self._load_image_data()
+            self.image_data, self.chara_images = self._load_image_data() 
 
             # 加载所有角色的立绘数据
             self._load_all_chara_images()
