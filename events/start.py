@@ -221,7 +221,8 @@ def handle_daily_routine(this, ctx):
         )
         
         # [口上互动菜单] 只有选择了对象后才显示
-        target_id = this.console.init.charaters_key['0'].get('选择对象')
+        # [allstate加冕] 选择对象从运行时家读取
+        target_id = this.console.allstate.get('System', {}).get('选择对象')
         if target_id and target_id != '0':
             this.console.PRINT_DIVIDER("-", length=60)
             this.console.PRINT("【互动选项】")
@@ -251,7 +252,8 @@ def handle_daily_routine(this, ctx):
             if input_val.startswith("c_"):
                 target_id = input_val.split('_')[1]
                 # 修改底层，下次循环 get_context 会自动更新 target_state
-                this.console.init.charaters_key['0']['选择对象'] = target_id
+                # [allstate加冕] 选择对象写入运行时家
+                this.console.allstate.setdefault('System', {})['选择对象'] = target_id
                 
                 # 获取新名字用于提示
                 new_target = this.console.allstate.get(target_id)

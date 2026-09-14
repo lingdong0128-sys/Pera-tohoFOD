@@ -26,7 +26,7 @@ def event_check_companion_attributes(this, char_id: str = None) -> List[int]:
     kojo = EraKojoHandler(this.console)
     
     if char_id is None:
-        char_id = this.console.init.charaters_key.get('0', {}).get('选择对象', '0')
+        char_id = this.console.allstate.get('System', {}).get('选择对象', '0')
     
     companion_attributes = []
     
@@ -110,7 +110,7 @@ def event_has_companion_attribute(this, attribute_id: int, char_id: str = None) 
     kojo = EraKojoHandler(this.console)
     
     if char_id is None:
-        char_id = this.console.init.charaters_key.get('0', {}).get('选择对象', '0')
+        char_id = this.console.allstate.get('System', {}).get('选择对象', '0')
     
     companion_attributes = event_check_companion_attributes(this, char_id)
     return attribute_id in companion_attributes
@@ -131,7 +131,7 @@ def event_get_crit_bonus(this, char_id: str = None) -> int:
     kojo = EraKojoHandler(this.console)
     
     if char_id is None:
-        char_id = this.console.init.charaters_key.get('0', {}).get('选择对象', '0')
+        char_id = this.console.allstate.get('System', {}).get('选择对象', '0')
     
     # 检查是否有心路爆破属性
     if event_has_companion_attribute(this, 22, char_id):
@@ -155,7 +155,7 @@ def event_can_ignore_passive_battle(this, char_id: str = None) -> bool:
     kojo = EraKojoHandler(this.console)
     
     if char_id is None:
-        char_id = this.console.init.charaters_key.get('0', {}).get('选择对象', '0')
+        char_id = this.console.allstate.get('System', {}).get('选择对象', '0')
     
     # 检查是否有无意识属性
     if event_has_companion_attribute(this, 20, char_id):

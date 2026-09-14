@@ -3,6 +3,7 @@ import sys
 import time
 import json
 import os
+import queue
 from Musicbox import MusicBox
 from dynamic_loader import DynamicLoader, ContentType, InlineFragment  # 导入动态加载器
 from clickable import ClickableString
@@ -23,9 +24,13 @@ class SimpleERAConsole:
             "window_title": "ERA Console---",
             "font_path": "./font/luoli.ttf",
             "font_size": 24,
-            "screen_width": 2000,
-            "screen_height": 1200,
-            "log_file": "./logs/game_log.txt"
+            "screen_width": 1600,
+            "screen_height": 1000,
+            "log_file": "./logs/game_log.txt",
+            # [MCP] 调试服务配置：总开关 / 绑定地址 / 端口（仅本机调试用，绑定 127.0.0.1）
+            "mcp_enabled": True,
+            "mcp_host": "127.0.0.1",
+            "mcp_port": 7310
         }
         
         # 加载配置文件
@@ -36,8 +41,11 @@ class SimpleERAConsole:
         self.screen_height = self.config.get("screen_height", self.default_config["screen_height"])
         
         # 创建屏幕
+        # [虚拟画布] SCALED：screen 表面永远是设计分辨率（screen_width/height），
+        # pygame 自动把它缩放到真实窗口并保持宽高比（多出的部分信箱留黑边）；
+        # 鼠标事件坐标会被自动换算回设计坐标。RESIZABLE：窗口可随意拉大小，设计分辨率不变。
         self.screen = pygame.display.set_mode(
-            (self.screen_width, self.screen_height))
+            (self.screen_width, self.screen_height), pygame.SCALED | pygame.RESIZABLE)
         pygame.display.set_caption(self.config.get("window_title", self.default_config["window_title"]))
 
         # 字体设置
@@ -60,7 +68,7 @@ class SimpleERAConsole:
         # 输入区域高度
         self.input_area_height = 40
 
-        # 初始化动态加载器
+        # 初始化动态加载器（传入的是设计分辨率，见上方虚拟画布说明）
         self.loader = DynamicLoader(
             screen_width=self.screen_width,
             screen_height=self.screen_height,
@@ -73,6 +81,8 @@ class SimpleERAConsole:
         self.input_text = ""
         self.input_history = []  # 输入历史记录
         self.input_history_index = -1  # 当前输入历史索引
+        # [MCP] 外部注入输入队列：MCP 线程 put，INPUT 循环每帧 get_nowait（queue.Queue 线程安全）
+        self.mcp_input_queue = queue.Queue()
         self.cursor_visible = True
         self.cursor_timer = 0
         self.running = True
@@ -653,6 +663,35 @@ class SimpleERAConsole:
 
     # main.py - 修复 INPUT 方法中的空行处理
 
+    def _commit_input(self, user_input):
+        """
+        提交一次输入（键盘回车与 MCP 注入共用路径）：
+        记录输入历史、回显到控制台、复位输入法与输入框状态，返回提交的文本
+        """
+        if user_input:  # 只有非空才存历史，防止存入一堆空行
+            self.input_history.append(user_input)
+        self.input_history_index = -1
+
+        # 显示用户输入
+        self.loader.add_text(f"{user_input}", (255, 255, 200))
+        self.loader.add_text("")  # 空行
+
+        # 结束输入时关闭 IME
+        pygame.key.stop_text_input()
+        self.composition_text = ""
+        self.input_text = ""
+        return user_input
+
+    def _poll_external_input(self):
+        """
+        [MCP] 轮询外部注入的输入队列（非阻塞）。
+        有则返回注入文本，无则返回 None。队列由 MCP 工具 pera_send_input 填充。
+        """
+        try:
+            return self.mcp_input_queue.get_nowait()
+        except Exception:
+            return None
+
     def INPUT(self):
             """获取用户输入 - 支持中文输入法 (IME)"""
             self.input_text = ""
@@ -665,11 +704,27 @@ class SimpleERAConsole:
             input_y = self.screen_height - self.input_area_height + 10
             
             while waiting_for_input and self.running:
+                # [MCP] 外部注入输入：视同玩家按下回车提交（每帧轮询一次队列）
+                external_input = self._poll_external_input()
+                if external_input is not None:
+                    waiting_for_input = False
+                    return self._commit_input(external_input)
+
                 # 2. 设置输入法候选框的位置跟随光标
-                # 计算当前文字宽度
+                # 计算当前文字宽度（设计分辨率坐标）
                 current_width = self.font.size("> " + self.input_text + self.composition_text)[0]
+                # [虚拟画布] SCALED 的信箱缩放下，把设计坐标换算成真实窗口坐标再喂给 IME
+                try:
+                    win_w, win_h = pygame.display.get_window_size()
+                    fit = min(win_w / self.screen_width, win_h / self.screen_height)
+                    off_x = (win_w - self.screen_width * fit) / 2
+                    off_y = (win_h - self.screen_height * fit) / 2
+                    ime_x = int(off_x + (10 + current_width) * fit)
+                    ime_y = int(off_y + input_y * fit)
+                except Exception:
+                    ime_x, ime_y = 10 + current_width, input_y
                 # 设置选词框位置 (x, y, w, h)
-                pygame.key.set_text_input_rect(pygame.Rect(10 + current_width, input_y, 10, 30))
+                pygame.key.set_text_input_rect(pygame.Rect(ime_x, ime_y, 10, 30))
 
                 for event in pygame.event.get():
                     if event.type == pygame.QUIT:
@@ -701,23 +756,8 @@ class SimpleERAConsole:
                     # 改用 KEYDOWN 以获得更好的响应速度
                     elif event.type == pygame.KEYDOWN:
                         if event.key == pygame.K_RETURN:
-                            user_input = self.input_text
-                            
-                            # 保存到输入历史
-                            if user_input: # 只有非空才存历史，防止存入一堆空行
-                                self.input_history.append(user_input)
-                            self.input_history_index = -1
-                            
-                            # 显示用户输入
-                            self.loader.add_text(f"{user_input}", (255, 255, 200))
-                            self.loader.add_text("")  # 空行
-                            
-                            # 3. 结束输入时关闭 IME
-                            pygame.key.stop_text_input()
-                            self.composition_text = "" 
-                            self.input_text = ""
                             waiting_for_input = False
-                            return user_input
+                            return self._commit_input(self.input_text)
                         
                         elif event.key == pygame.K_BACKSPACE:
                             if not self.composition_text:

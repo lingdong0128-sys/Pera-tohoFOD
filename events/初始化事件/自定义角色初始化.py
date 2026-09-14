@@ -351,9 +351,9 @@ def event_custom_chara_init(this):
         # ================= 输入处理 =================
         inp = this.console.INPUT()
 
-        # 导航
-        if inp == '9': current_stage_idx += 1  # 下一步
-        elif inp == '7': current_stage_idx -= 1  # 上一步
+        # 导航（带上界保护：阶段计数冲过出生地会导致渲染全空、完成按钮失效）
+        if inp == '9' and current_stage_idx < len(STAGES) - 1: current_stage_idx += 1  # 下一步
+        elif inp == '7' and current_stage_idx > 0: current_stage_idx -= 1  # 上一步
         
         # 阶段 0: 名字
         elif inp == '1':  # set_name
@@ -435,8 +435,11 @@ def event_custom_chara_init(this):
                     if this.temp_init_big in map_data:
                         small_maps = map_data.get(this.temp_init_big, {})
                         if sm_map in small_maps:
-                            this.console.init.charaters_key['0']['大地图'] = this.temp_init_big
-                            this.console.init.charaters_key['0']['小地图'] = sm_map
+                            # [allstate加冕] 出生点写进运行时位置家（旧实现写 charaters_key，此后永远陈旧）
+                            this.console.allstate.setdefault('positions', {})['0'] = {
+                                '大地图': this.temp_init_big,
+                                '小地图': sm_map,
+                            }
                             this.temp_init_ready = True
 
             # 重选区域

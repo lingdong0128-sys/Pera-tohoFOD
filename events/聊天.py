@@ -1,6 +1,6 @@
 def event_聊天(this):
     # 1. 获取目标 ID
-    target_id = this.console.init.charaters_key['0'].get('选择对象')
+    target_id = this.console.allstate.get('System', {}).get('选择对象')
     if not target_id:
         this.console.PRINT("你还没有选择对象哦！")
         return

@@ -83,12 +83,23 @@ class EventManager:
                                     
                                     # 读取是否为主事件标记
                                     is_main = getattr(event_func, 'is_main_event', False)
-                                    
+
+                                    # [MCP] 读取工具暴露标记：挂了 is_mcp_tool 属性的事件
+                                    # 会在 MCP 服务启动时自动注册为对外工具
+                                    is_mcp = getattr(event_func, 'is_mcp_tool', False)
+                                    mcp_name = getattr(event_func, 'mcp_name', '')
+                                    mcp_description = getattr(event_func, 'mcp_description', '')
+
                                     self.events[event_key] = event_func
                                     self.eventid[event_id] = event_key
-                                    
+
                                     # 存入元数据
-                                    self.events_meta[event_key] = {'is_main': is_main}
+                                    self.events_meta[event_key] = {
+                                        'is_main': is_main,
+                                        'is_mcp_tool': is_mcp,
+                                        'mcp_name': mcp_name,
+                                        'mcp_description': mcp_description,
+                                    }
                                     
                                     if not is_reload:
                                         tag = "[主]" if is_main else ""

@@ -33,7 +33,7 @@ def event_battle_initialize(this, monster_data, chara_id=None):
     # 确定参与战斗的角色
     if chara_id is None:
         # 从当前选择的目标角色获取
-        chara_id = this.console.init.charaters_key.get('0', {}).get('选择对象', '0')
+        chara_id = this.console.allstate.get('System', {}).get('选择对象', '0')
     
     # 初始化战斗状态存储在全局
     if 'dungeon_battle' not in this.console.allstate:
@@ -91,7 +91,7 @@ def event_battle_get_state(this, chara_id=None):
         dict: 战斗状态，如果不存在则返回None
     """
     if chara_id is None:
-        chara_id = this.console.init.charaters_key.get('0', {}).get('选择对象', '0')
+        chara_id = this.console.allstate.get('System', {}).get('选择对象', '0')
     
     return this.console.allstate.get('dungeon_battle', {}).get(chara_id)
 
@@ -104,7 +104,7 @@ def event_battle_end(this, chara_id=None):
         chara_id: 角色ID，默认为当前选择的目标角色
     """
     if chara_id is None:
-        chara_id = this.console.init.charaters_key.get('0', {}).get('选择对象', '0')
+        chara_id = this.console.allstate.get('System', {}).get('选择对象', '0')
     
     battle_state = event_battle_get_state(this, chara_id)
     if battle_state:
@@ -128,7 +128,7 @@ def event_battle_player_attack(this, skill_id=None, chara_id=None):
         dict: 攻击结果
     """
     if chara_id is None:
-        chara_id = this.console.init.charaters_key.get('0', {}).get('选择对象', '0')
+        chara_id = this.console.allstate.get('System', {}).get('选择对象', '0')
     
     battle_state = event_battle_get_state(this, chara_id)
     if not battle_state:
@@ -193,7 +193,7 @@ def event_battle_monster_attack(this, chara_id=None):
         dict: 攻击结果
     """
     if chara_id is None:
-        chara_id = this.console.init.charaters_key.get('0', {}).get('选择对象', '0')
+        chara_id = this.console.allstate.get('System', {}).get('选择对象', '0')
     
     battle_state = event_battle_get_state(this, chara_id)
     if not battle_state:
@@ -261,7 +261,7 @@ def event_battle_monster_ai(this, chara_id=None):
         str: 使用的技能ID，None表示普通攻击
     """
     if chara_id is None:
-        chara_id = this.console.init.charaters_key.get('0', {}).get('选择对象', '0')
+        chara_id = this.console.allstate.get('System', {}).get('选择对象', '0')
     
     battle_state = event_battle_get_state(this, chara_id)
     if not battle_state:
@@ -294,7 +294,7 @@ def event_battle_next_turn(this, chara_id=None):
         dict: 新回合状态
     """
     if chara_id is None:
-        chara_id = this.console.init.charaters_key.get('0', {}).get('选择对象', '0')
+        chara_id = this.console.allstate.get('System', {}).get('选择对象', '0')
     
     battle_state = event_battle_get_state(this, chara_id)
     if not battle_state:
@@ -331,7 +331,7 @@ def event_battle_check_end_condition(this, chara_id=None):
         }
     """
     if chara_id is None:
-        chara_id = this.console.init.charaters_key.get('0', {}).get('选择对象', '0')
+        chara_id = this.console.allstate.get('System', {}).get('选择对象', '0')
     
     battle_state = event_battle_get_state(this, chara_id)
     if not battle_state:
@@ -378,7 +378,7 @@ def event_dungeon_battle_main(this, monster_data, chara_id=None):
         str: 战斗结果 'victory'/'defeat'/None（战斗未完成）
     """
     if chara_id is None:
-        chara_id = this.console.init.charaters_key.get('0', {}).get('选择对象', '0')
+        chara_id = this.console.allstate.get('System', {}).get('选择对象', '0')
     
     # 初始化战斗
     event_battle_initialize(this, monster_data, chara_id)
@@ -467,7 +467,7 @@ def event_dungeon_passive_encounter(this, room_data, chara_id=None):
         str: 战斗结果 'victory'/'defeat'/None
     """
     if chara_id is None:
-        chara_id = this.console.init.charaters_key.get('0', {}).get('选择对象', '0')
+        chara_id = this.console.allstate.get('System', {}).get('选择对象', '0')
     
     # 检查房间是否有怪物
     if not room_data.get('monster'):
@@ -513,7 +513,7 @@ def event_dungeon_active_attack(this, monster_data, chara_id=None):
         str: 战斗结果 'victory'/'defeat'/None
     """
     if chara_id is None:
-        chara_id = this.console.init.charaters_key.get('0', {}).get('选择对象', '0')
+        chara_id = this.console.allstate.get('System', {}).get('选择对象', '0')
     
     this.console.PRINT(f"你主动向 {monster_data['name']} 发起了攻击！", colors=(255, 255, 100))
     return event_dungeon_battle_main(this, monster_data, chara_id)
@@ -534,7 +534,7 @@ def event_battle_victory_rewards(this, chara_id=None):
         list: 获得的物品ID列表
     """
     if chara_id is None:
-        chara_id = this.console.init.charaters_key.get('0', {}).get('选择对象', '0')
+        chara_id = this.console.allstate.get('System', {}).get('选择对象', '0')
     
     battle_state = event_battle_get_state(this, chara_id)
     if not battle_state:
@@ -574,7 +574,7 @@ def event_battle_defeat_hscene(this, chara_id=None):
         bool: 是否成功处理H场景
     """
     if chara_id is None:
-        chara_id = this.console.init.charaters_key.get('0', {}).get('选择对象', '0')
+        chara_id = this.console.allstate.get('System', {}).get('选择对象', '0')
     
     battle_state = event_battle_get_state(this, chara_id)
     if not battle_state:

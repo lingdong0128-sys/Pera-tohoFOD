@@ -2,7 +2,10 @@
     "window_title": "ERA Console",
     "font_path": "./font/luoli.ttf",
     "font_size": 24,
-    "screen_width": 2000,
-    "screen_height": 1200,
-    "log_file": "./logs/game_log.txt"
+    "screen_width": 1600,
+    "screen_height": 1000,
+    "log_file": "./logs/game_log.txt",
+    "mcp_enabled": true,
+    "mcp_host": "127.0.0.1",
+    "mcp_port": 7310
 }

@@ -170,7 +170,7 @@ def event_通用口上_日常(this, action, target_id=None):
     :param target_id: 目标角色ID，默认为当前选择对象
     """
     if target_id is None:
-        target_id = this.console.init.charaters_key['0'].get('选择对象')
+        target_id = this.console.allstate.get('System', {}).get('选择对象')
     
     if not target_id:
         this.console.PRINT("没有选择对象！", colors=(255, 100, 100))
@@ -196,7 +196,7 @@ def event_通用口上_H(this, action, target_id=None):
     :param target_id: 目标角色ID，默认为当前选择对象
     """
     if target_id is None:
-        target_id = this.console.init.charaters_key['0'].get('选择对象')
+        target_id = this.console.allstate.get('System', {}).get('选择对象')
     
     if not target_id:
         this.console.PRINT("没有选择对象！", colors=(255, 100, 100))
@@ -218,7 +218,7 @@ def event_通用口上_地牢(this, action, target_id=None):
     :param target_id: 目标角色ID，默认为当前选择对象
     """
     if target_id is None:
-        target_id = this.console.init.charaters_key['0'].get('选择对象')
+        target_id = this.console.allstate.get('System', {}).get('选择对象')
     
     if not target_id:
         this.console.PRINT("没有选择对象！", colors=(255, 100, 100))

@@ -29,6 +29,8 @@ class thethings:
         self.console.init_all()
         self.input = ""
         self.event_manager = EventManager(self.console)
+        # [MCP] 启动调试服务（config.json 的 mcp_enabled 控制开关，见 events/调试相关/MCP接口.py）
+        self.event_manager.trigger_event('mcp_启动服务', self, silent=True)
         self.charater_pwds = {}
         self.cs = ClickableString
         self.main()

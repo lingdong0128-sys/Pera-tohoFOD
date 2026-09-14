@@ -24,12 +24,15 @@ def event_map(this):
     # 获取内存中的地图数据（可能是刚读的，也可能是存档覆盖过的）
     map_data = this.console.map_data
 
-    # [步骤 2] 刷新角色位置 (charater_pwds)
-    
+    # [步骤 2] 刷新角色位置
+    # [allstate加冕] 位置的家是 console.allstate['positions']；this.charater_pwds 只是兼容别名（同一对象）
+    positions = this.console.allstate.setdefault('positions', {})
+    this.charater_pwds = positions
+
     # 先重置所有角色位置到默认点（防止有人在地图里消失）
     # 假设 '10000'/'10001' 是虚空或者默认房间
     for i in this.console.init.chara_ids:
-        this.charater_pwds[i] = {
+        positions[i] = {
             '大地图': '10000',
             '小地图': '10001'
         }
@@ -41,20 +44,20 @@ def event_map(this):
         # 比如跳过更新，或者将里面的角色全部移动到地牢入口
         if content.get('状态') == '腐化':
             # print(f"DEBUG: {big_map} 已腐化，跳过常规位置更新")
-            continue 
+            continue
         # --- 遍历房间 ---
         for key, value in content.items():
             # 过滤掉非房间的属性键 (status, dungeon_level 等)
             if key in ['状态']:
                 continue
-                
+
             small_map = key
             charater_list = value # list: ['0', '1']
-            
+
             for charater_id in charater_list:
                 # 只有当角色ID有效时才更新
-                if charater_id in this.charater_pwds:
-                    this.charater_pwds[charater_id] = {
+                if charater_id in positions:
+                    positions[charater_id] = {
                         '大地图': big_map,
                         '小地图': small_map
                     }

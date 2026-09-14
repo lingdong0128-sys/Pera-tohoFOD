@@ -24,7 +24,7 @@ def event_dungeon_initialize_stats(this, char_id: str = None) -> Dict[int, int]:
     """
     # 获取目标角色ID
     if char_id is None:
-        char_id = this.console.init.charaters_key.get('0', {}).get('选择对象', '0')
+        char_id = this.console.allstate.get('System', {}).get('选择对象', '0')
     
     # 创建kojo上下文
     from utils.era_handler import EraKojoHandler
@@ -107,7 +107,7 @@ def event_dungeon_get_stat(this, stat_id: int, char_id: str = None) -> int:
         属性值，如果属性不存在返回0
     """
     if char_id is None:
-        char_id = this.console.init.charaters_key.get('0', {}).get('选择对象', '0')
+        char_id = this.console.allstate.get('System', {}).get('选择对象', '0')
     
     # 确保地牢属性已初始化
     if 'dungeon_stats' not in this.console.allstate:
@@ -133,7 +133,7 @@ def event_dungeon_set_stat(this, stat_id: int, value: int, char_id: str = None) 
         设置后的属性值
     """
     if char_id is None:
-        char_id = this.console.init.charaters_key.get('0', {}).get('选择对象', '0')
+        char_id = this.console.allstate.get('System', {}).get('选择对象', '0')
     
     # 确保地牢属性已初始化
     if 'dungeon_stats' not in this.console.allstate:
@@ -197,7 +197,7 @@ def event_dungeon_get_all_stats(this, char_id: str = None) -> Dict[int, int]:
         所有地牢属性字典
     """
     if char_id is None:
-        char_id = this.console.init.charaters_key.get('0', {}).get('选择对象', '0')
+        char_id = this.console.allstate.get('System', {}).get('选择对象', '0')
     
     # 确保地牢属性已初始化
     if 'dungeon_stats' not in this.console.allstate:
@@ -218,7 +218,7 @@ def event_dungeon_reset_stats(this, char_id: str = None) -> None:
         char_id: 角色ID，如果为None则使用当前选择的目标角色
     """
     if char_id is None:
-        char_id = this.console.init.charaters_key.get('0', {}).get('选择对象', '0')
+        char_id = this.console.allstate.get('System', {}).get('选择对象', '0')
     
     # 清除地牢属性
     if 'dungeon_stats' in this.console.allstate:

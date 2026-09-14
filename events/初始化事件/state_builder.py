@@ -263,7 +263,30 @@ def event_build_allstate(this):
         if '异常状态' not in raw_data:
             raw_data['异常状态'] = abnormal_states
         allstate[chara_id]=char_state
+
+    # --- [allstate加冕] 保留 map 事件先行构建的 positions ---
+    # 启动顺序是 main.py 先触发 'map' 再触发 'build_allstate'，
+    # 所以重建角色字典时必须把已有的位置数据带过来，否则会被整体替换抹掉
+    old_allstate = getattr(this.console, 'allstate', None)
+    if isinstance(old_allstate, dict) and 'positions' in old_allstate:
+        allstate['positions'] = old_allstate['positions']
+
+    # --- [allstate加冕] 全局运行时标量的家：allstate['System'] ---
+    # 以 CSV 静态键做种子（SCENE/MASTER/MONTH/DAY/TIME 等），补运行时默认值；
+    # 时间8键（YEAR/HOUR/...）由时间控制事件随后写入
+    system_state = dict(init.global_key.get('System', {}) or {})
+    system_state.setdefault('SCENE', '日常')
+    system_state.setdefault('选择对象', '0')
+    system_state.setdefault('WEATHER', '晴')
+    allstate['System'] = system_state
+
     this.console.allstate = allstate
+
+    # --- [allstate加冕] 兼容别名重绑：物理上只有一个 dict ---
+    # 旧代码读写 init.global_key['System'] / this.charater_pwds 依然生效（同一对象，永不漂移）；
+    # 新代码一律使用 allstate['System'] / allstate['positions']
+    init.global_key['System'] = allstate['System']
+    this.charater_pwds = allstate.setdefault('positions', {})
     return allstate
 
 def event_get_context_state(this):
@@ -278,8 +301,11 @@ def event_get_context_state(this):
     # 快捷引用
     init = this.console.init
     all_chars = this.console.allstate # 现在肯定有了
-    
-    target_id = init.charaters_key['0'].get('选择对象')
+    # [allstate加冕] 运行时状态统一从 allstate 读（System 经别名与 global_key['System'] 同源）
+    system_state = all_chars.get('System', {})
+    positions = all_chars.get('positions', {})
+
+    target_id = system_state.get('选择对象')
     if not target_id:
         target_id = '0'
     
@@ -304,20 +330,21 @@ def event_get_context_state(this):
         'session': {
             'chara_id': target_id,
             'master_id': master_id,
-            'location': init.charaters_key['0'].get('小地图', '未知'),
-            # 这里假设 global_key 里有这些变量，如果没有会返回默认值
-            'scene_type': init.global_key.get('System', {}).get('SCENE', '日常'),
-            'time_of_day': init.global_key.get('System', {}).get('TIME', '昼'),
-            # 时间系统数据（从全局System中读取）
-            'year': init.global_key.get('System', {}).get('YEAR', 1),
-            'month': init.global_key.get('System', {}).get('MONTH', 1),
-            'day': init.global_key.get('System', {}).get('DAY', 1),
-            'hour': init.global_key.get('System', {}).get('HOUR', 0),
-            'minute': init.global_key.get('System', {}).get('MINUTE', 0),
-            'weekday': init.global_key.get('System', {}).get('WEEKDAY', 1),
-            'total_minutes': init.global_key.get('System', {}).get('TOTAL_MINUTES', 0),
-            'current_festival': init.global_key.get('System', {}).get('CURRENT_FESTIVAL', None),
-            'weather': '晴', # 暂时写死，以后做天气系统
+            # [allstate加冕] 位置从运行时权威家读取（旧实现读 charaters_key['0'] 的陈旧值）
+            'location': positions.get('0', {}).get('小地图', '未知'),
+            'scene_type': system_state.get('SCENE', '日常'),
+            'time_of_day': system_state.get('TIME', '昼'),
+            # 时间系统数据（System 由时间控制事件维护）
+            'year': system_state.get('YEAR', 1),
+            'month': system_state.get('MONTH', 1),
+            'day': system_state.get('DAY', 1),
+            'hour': system_state.get('HOUR', 0),
+            'minute': system_state.get('MINUTE', 0),
+            'weekday': system_state.get('WEEKDAY', 1),
+            'total_minutes': system_state.get('TOTAL_MINUTES', 0),
+            'current_festival': system_state.get('CURRENT_FESTIVAL', None),
+            # [allstate加冕] 天气读真值（旧实现写死 '晴'）
+            'weather': system_state.get('WEATHER', '晴'),
             'temp': '20.5℃',
         },
 
@@ -327,9 +354,9 @@ def event_get_context_state(this):
 
         # --- 全局数据 ---
         'globals': {
-            'variables': init.global_key.get('Variable', {}), 
+            'variables': init.global_key.get('Variable', {}),
             'flags': init.global_key.get('Flag', {}),
-            'settings': init.global_key.get('System', {}),
+            'settings': system_state,
         },
 
         # --- 系统状态 ---
@@ -345,93 +372,103 @@ def event_get_context_state(this):
 
 def event_apply_save_data(this):
     """
-    [读档注入器 - 最终一致性版]
-    流程：读取存档 -> 覆盖全局变量 -> 恢复世界状态 -> 反向绑定 init -> 更新上下文
+    [读档注入器 - allstate加冕版]
+    流程：读取存档 -> 恢复地图并校准位置 -> 恢复全局变量 -> 恢复 allstate -> 重绑兼容别名 -> 恢复时间 -> 重建上下文
     trigger: apply_save
     """
     save_data = getattr(this, 'temp_save_data', None)
-    # [核心校准逻辑]
+    if not save_data:
+        return None
+
+    # ---------------------------------------------------------
+    # 步骤 A: 恢复地图 + 校准位置
+    # map 事件会把 allstate['positions'] 重置为 map_state 的推导值；
+    # 若存档里带有真实 positions（新档），步骤 C 会再用它覆盖回来
+    # ---------------------------------------------------------
     if 'map_state' in save_data:
         # 1. 用存档里的地图（包含腐化状态）覆盖内存
         this.console.map_data = save_data['map_state']
-        
-        # 2. 重新触发 map 事件
-        # 因为 map_data 变了，我们需要重新计算 charater_pwds
-        # 这一步就是"校准"：让角色位置与载入的地图状态对齐
+
+        # 2. 重新触发 map 事件，让位置与载入的地图状态对齐（旧档的兜底推导）
         this.event_manager.trigger_event('map', this)
-        
+
         this.console.PRINT(">>> 地图状态已校准。", colors=(100, 255, 100))
-    if not save_data: return None
-
-    # 1. 获取基础模板 (用于填充那些存档里没有的临时数据)
-    new_ctx = event_get_context_state(this)
 
     # ---------------------------------------------------------
-    # 核心步骤 A: 恢复全局变量 (Global Key)
+    # 步骤 B: 恢复全局变量 (Variable / Flag；System 的家已在 allstate)
     # ---------------------------------------------------------
-    if 'globals' in save_data:
-        # 1. 更新上下文引用
-        new_ctx['globals'] = save_data['globals']
-        
-        # 2. [反向映射] 将读出的数据写回 init.global_key
-        # 这样以后调用 init.global_key['Variable'] 拿到的就是存档里的数据
-        if 'variables' in save_data['globals']:
-            this.console.init.global_key['Variable'] = save_data['globals']['variables']
-        if 'flags' in save_data['globals']:
-            this.console.init.global_key['Flag'] = save_data['globals']['flags']
-        if 'settings' in save_data['globals']:
-            this.console.init.global_key['System'] = save_data['globals']['settings']
+    saved_globals = save_data.get('globals', {}) or {}
+    if 'variables' in saved_globals:
+        this.console.init.global_key['Variable'] = saved_globals['variables']
+    if 'flags' in saved_globals:
+        this.console.init.global_key['Flag'] = saved_globals['flags']
 
     # ---------------------------------------------------------
-    # 核心步骤 B: 恢复世界状态 (AllState) & 重建引用连接
+    # 步骤 C: 恢复世界状态 (allstate，运行时状态的唯一家)
     # ---------------------------------------------------------
-    if 'world_state' in save_data:
-        loaded_allstate = save_data['world_state']
-        
-        # [核心修复] 增强的连接逻辑
-        for chara_id, chara_state in loaded_allstate.items():
-            
-            # 情况 A: 存档里有 data (正常情况，修复 save_system 后)
-            if 'data' in chara_state:
-                # 将存档里的数据覆盖到底层 init
-                this.console.init.charaters_key[chara_id] = chara_state['data']
-            
-            # 情况 B: 存档里没 data (旧存档/坏档)
-            # 我们必须手动补上这个键，否则后续代码会 KeyError
-            else:
-                # 指回游戏的初始数据，防止崩溃
-                # 虽然会丢失存档里的初会面记录，但至少游戏能跑了
-                chara_state['data'] = this.console.init.charaters_key.get(chara_id, {})
-                # print(f"警告: 修复了角色 {chara_id} 缺失的 data 引用")
+    loaded_allstate = save_data.get('world_state') or {}
 
-        # 3. [赋值] 将 console.allstate 指向这个加载好的大字典
-        this.console.allstate = loaded_allstate
-        new_ctx['world_state'] = loaded_allstate
+    # [连接逻辑] 存档里的角色 data 覆盖底层 init.charaters_key；缺 data 的补引用防 KeyError
+    for chara_id, chara_state in loaded_allstate.items():
+        if not isinstance(chara_state, dict):
+            continue
+        if 'data' in chara_state:
+            this.console.init.charaters_key[chara_id] = chara_state['data']
+        else:
+            chara_state['data'] = this.console.init.charaters_key.get(chara_id, {})
 
-        # 4. 更新当前 Context 里的快捷引用
-        # 确保 new_ctx['master'] 指向的是新加载的 loaded_allstate 里的对象
-        master_id = str(new_ctx['session'].get('master_id', '0'))
-        chara_id = str(new_ctx['session'].get('chara_id', '0'))
-        
-        new_ctx['master'] = loaded_allstate.get(master_id, {})
-        new_ctx['chara'] = loaded_allstate.get(chara_id, {})
+    # [allstate加冕] 旧档特征检测（按结构判断，不用版本号）：
+    # 旧档 world_state 没有 'System'/'positions'，运行时状态散在 globals.settings / session 里
+    if isinstance(loaded_allstate, dict) and 'System' not in loaded_allstate:
+        legacy_settings = dict(saved_globals.get('settings', {}) or {})
+        legacy_settings.setdefault('SCENE', '日常')
+        legacy_settings.setdefault('选择对象', '0')
+        legacy_settings.setdefault('WEATHER', '晴')
+        # 旧档的 data 字典里可能存有 选择对象（经 charaters_key 引用间接入档）
+        legacy_data = loaded_allstate.get('0', {}).get('data', {})
+        if isinstance(legacy_data, dict) and legacy_data.get('选择对象'):
+            legacy_settings['选择对象'] = legacy_data['选择对象']
+        # 旧档 session.chara_id 优先
+        old_session = save_data.get('session', {}) or {}
+        if old_session.get('chara_id'):
+            legacy_settings['选择对象'] = old_session['chara_id']
+        loaded_allstate['System'] = legacy_settings
 
-        this.console.PRINT(">>> 数据流重定向完成 (Save -> Allstate -> Init)", colors=(100, 255, 100))
-    
+    if isinstance(loaded_allstate, dict) and 'positions' not in loaded_allstate:
+        # 旧档没有 positions → 继承步骤 A 中 map 事件刚校准的推导结果
+        # （必须在整体替换 allstate 之前从旧对象里捞出来，否则会被孤儿化）
+        derived_positions = (getattr(this.console, 'allstate', None) or {}).get('positions', {})
+        loaded_allstate['positions'] = derived_positions
+
+    this.console.allstate = loaded_allstate
+
     # ---------------------------------------------------------
-    # 核心步骤 D: 恢复时间系统
+    # 步骤 D: [allstate加冕] 重绑兼容别名（物理同一 dict，见 build_allstate 注释）
     # ---------------------------------------------------------
-    # 从全局变量加载时间状态到时间管理器
+    if isinstance(loaded_allstate, dict):
+        this.console.init.global_key['System'] = loaded_allstate.setdefault('System', {})
+    this.charater_pwds = loaded_allstate.setdefault('positions', {})
+
+    this.console.PRINT(">>> 数据流重定向完成 (Save -> Allstate -> Init)", colors=(100, 255, 100))
+
+    # ---------------------------------------------------------
+    # 步骤 E: 恢复时间系统（System -> TimeManager；必须在别名重绑之后）
+    # ---------------------------------------------------------
     this.event_manager.trigger_event('time_control', this, 'load_from_global')
 
     # ---------------------------------------------------------
-    # 核心步骤 C: 恢复其他 Session 信息
+    # 步骤 F: 基于恢复后的状态重建上下文，再用存档里的其余顶层键覆盖
     # ---------------------------------------------------------
+    new_ctx = event_get_context_state(this)
+    if 'globals' in save_data:
+        new_ctx['globals'] = dict(save_data['globals'])
+        # settings 指向恢复后的 System（同一对象）
+        new_ctx['globals']['settings'] = loaded_allstate.get('System', {})
     for key in save_data:
         # 排除掉我们已经手动处理过的 key，剩下的直接覆盖
         if key not in ['console', 'init', 'event_manager', 'loader', 'world_state', 'globals']:
             new_ctx[key] = save_data[key]
-            
+
     return new_ctx
 
 # 注册触发器

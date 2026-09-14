@@ -25,9 +25,9 @@ class InlineFragment:
         self.height = 0  # 图片高度
 
     def calculate_width(self, font):
-        """计算片段宽度"""
+        """计算片段宽度（设计分辨率坐标，无屏幕缩放概念）"""
         if self.is_image_mark and self.img_info:
-            # 如果是图片标记，宽度为图片宽度（或默认占位符宽度）
+            # 图片标记：宽度为图片目标宽度
             if self.size:
                 self.width = self.size[0]
             else:
@@ -39,7 +39,7 @@ class InlineFragment:
         return self.width
 
     def render_image(self):
-        """渲染图片（如果是图片标记）"""
+        """渲染图片（如果是图片标记），按设计分辨率坐标输出"""
         if not self.is_image_mark or not self.img_info:
             return None
 
@@ -52,30 +52,28 @@ class InlineFragment:
 
             image = pygame.image.load(img_path).convert_alpha()
 
-            # 裁剪
+            # 裁剪 (裁剪是基于原图的，不需要缩放坐标，除非clip_pos本身是相对的)
+            # 这里假设 clip_pos 是基于原图像素的，所以先裁剪
             clip_x, clip_y = self.clip_pos if self.clip_pos else (0, 0)
-            clip_width = self.img_info.get('width', 270)
+            clip_width = self.img_info.get('width', 270) # CSV里的width通常是裁剪宽
             clip_height = self.img_info.get('height', 270)
 
-            # 确保裁剪区域有效
             img_width, img_height = image.get_size()
-            if clip_x + clip_width > img_width:
-                clip_width = img_width - clip_x
-            if clip_y + clip_height > img_height:
-                clip_height = img_height - clip_y
-
-            if clip_width > 0 and clip_height > 0:
-                clip_rect = pygame.Rect(
-                    clip_x, clip_y, clip_width, clip_height)
-                clipped_image = image.subsurface(clip_rect)
+            
+            # 安全裁剪
+            safe_clip_w = min(clip_width, img_width - clip_x)
+            safe_clip_h = min(clip_height, img_height - clip_y)
+            
+            if safe_clip_w > 0 and safe_clip_h > 0:
+                clipped_image = image.subsurface(pygame.Rect(clip_x, clip_y, safe_clip_w, safe_clip_h))
             else:
                 return None
 
-            # 调整大小
+            # 如果指定了 size，按 size 缩放到目标尺寸（设计分辨率坐标）
             if self.size:
-                target_width, target_height = self.size
-                clipped_image = pygame.transform.scale(
-                    clipped_image, (target_width, target_height))
+                target_w, target_h = self.size
+                if target_w > 0 and target_h > 0 and (target_w, target_h) != clipped_image.get_size():
+                    clipped_image = pygame.transform.smoothscale(clipped_image, (target_w, target_h))
 
             return clipped_image
 
@@ -134,8 +132,8 @@ class DynamicLoader:
         初始化动态加载器
 
         Args:
-            screen_width: 屏幕宽度
-            screen_height: 屏幕高度
+            screen_width: 设计分辨率宽（虚拟画布宽）
+            screen_height: 设计分辨率高（虚拟画布高）
             font: PyGame字体对象
             input_area_height: 输入区域高度
             log_file: 日志文件路径
@@ -144,6 +142,9 @@ class DynamicLoader:
         self.screen_height = screen_height
         self.font = font
         self.input_area_height = input_area_height
+
+        # [虚拟画布] 本类所有坐标一律是设计分辨率坐标；
+        # 真实窗口的缩放由 ERAconsole 的 pygame.SCALED 统一处理，这里不再感知缩放
         # 图片信息注册表
         self.image_registry = {}  # url -> 图片信息
         self.image_surface_cache = {}  # 缓存已渲染的图片Surface
@@ -151,12 +152,13 @@ class DynamicLoader:
         # 内容管理
         self.history: List[ConsoleContent] = []  # 完整的历史记录
         self.max_history_length = 10000  # 最大历史记录数
+        self.seq_counter = 0  # [MCP] 内容项单调序号：history 会截断，绝对下标会漂移，seq 是外部读取的稳定游标
         self.current_display: List[ConsoleContent] = []  # 当前显示的内容
         self.max_visible_items = 10000  # 最大可见项目数
 
         # 滚动控制
         self.scroll_offset = 0  # 滚动偏移（项目数）
-        self.line_height = 30  # 每行高度
+        self.line_height = font.get_linesize()  # 每行高度
         self.content_area_height = screen_height - input_area_height - 20  # 内容区域高度
 
         # 滚动条
@@ -211,6 +213,12 @@ class DynamicLoader:
             return None
     # 在DynamicLoader类中添加add_inline_fragments方法
 
+    def _append_history(self, item: ConsoleContent):
+        """统一的历史写入口：打上单调递增序号后写入（供 MCP 等外部读取做稳定游标）"""
+        self.seq_counter += 1
+        item.metadata['seq'] = self.seq_counter
+        self.history.append(item)
+
     def add_inline_fragments(self, fragments):
         """
         添加行内片段到历史记录 - 支持自动换行
@@ -258,7 +266,7 @@ class DynamicLoader:
                     })
                     self.clickable_region_counter += 1
 
-            self.history.append(item)
+            self._append_history(item)
             added_items.append(item)
 
             # 重置当前行
@@ -542,7 +550,7 @@ class DynamicLoader:
                 color=(255, 100, 100),
                 height=self.line_height
             )
-            self.history.append(item)
+            self._append_history(item)
             self._update_current_display()
             return item
 
@@ -591,7 +599,7 @@ class DynamicLoader:
 
             self.clickable_region_counter += 1
 
-        self.history.append(item)
+        self._append_history(item)
         self._write_to_log(f"[IMAGE] {img_url}")
         self._update_current_display()
 
@@ -667,7 +675,7 @@ class DynamicLoader:
             self.clickable_region_counter += 1
 
         # 6. 添加到历史记录
-        self.history.append(item)
+        self._append_history(item)
         self._write_to_log(f"[IMAGE_STACK] {len(img_elements)}张图片")
         self._update_current_display()
 
@@ -679,6 +687,7 @@ class DynamicLoader:
 
     def set_font(self, font):
         self.font = font
+        self.line_height=font.get_linesize()
 
     def handle_mouse_click(self, mouse_pos: Tuple[int, int]) -> Optional[str]:
         """
@@ -823,7 +832,7 @@ class DynamicLoader:
         if text is None or text == "":
             item = ConsoleContent(ContentType.TEXT, "",
                                   color, self.line_height)
-            self.history.append(item)
+            self._append_history(item)
             self._write_to_log("")
             added_items.append(item)
             self._update_current_display()
@@ -872,7 +881,7 @@ class DynamicLoader:
         for line in lines:
             item = ConsoleContent(ContentType.TEXT, line,
                                   color, self.line_height)
-            self.history.append(item)
+            self._append_history(item)
             self._write_to_log(line)
             added_items.append(item)
 
@@ -901,7 +910,7 @@ class DynamicLoader:
         divider_text = char * length
         item = ConsoleContent(ContentType.DIVIDER,
                               divider_text, color, self.line_height)
-        self.history.append(item)
+        self._append_history(item)
         self._write_to_log(divider_text)
         self._update_current_display()
         return item
@@ -918,7 +927,7 @@ class DynamicLoader:
         for item in items:
             content_item = ConsoleContent(
                 ContentType.MENU, item, color, self.line_height)
-            self.history.append(content_item)
+            self._append_history(content_item)
             self._write_to_log(item)
             added_items.append(content_item)
 
@@ -1012,12 +1021,13 @@ class DynamicLoader:
     # dynamic_loader.py - 添加 _render_and_draw_image_stack 方法
 
     def _render_and_draw_image_stack(self, screen, item, x, y):
-        """渲染图片叠加 - 最终优化版 (LRU缓存+实时合成+修复裁剪+修复点击)"""
+        """渲染图片叠加 - 支持等比缩放 (LRU缓存+实时合成+修复裁剪+修复点击)"""
         metadata = item.metadata
 
-        # 获取参数
+        # 获取模板尺寸（设计分辨率坐标，默认值见 _add_image_stack_mark）
         template_width = metadata.get('template_width', self.screen_width - 20)
         template_height = metadata.get('template_height', 300)
+        
         img_elements = metadata.get('img_elements', [])
 
         if not img_elements:
@@ -1058,13 +1068,11 @@ class DynamicLoader:
                         image = image.subsurface(
                             pygame.Rect(csv_x, csv_y, safe_w, safe_h))
 
-                # 3. [缩放]
-                target_width = info.get('target_width', image.get_width())
-                target_height = info.get('target_height', image.get_height())
-
-                if target_width != image.get_width() or target_height != image.get_height():
-                    image = pygame.transform.scale(
-                        image, (target_width, target_height))
+                # 3. [缩放] CSV/参数定义了目标尺寸时缩放到目标（设计分辨率坐标）
+                target_w = info.get('target_width', image.get_width())
+                target_h = info.get('target_height', image.get_height())
+                if target_w > 0 and target_h > 0 and (target_w, target_h) != image.get_size():
+                    image = pygame.transform.smoothscale(image, (target_w, target_h))
 
                 # 4. [偏移并绘制]
                 offset_x = info.get('offset_x', 0)
@@ -1124,7 +1132,7 @@ class DynamicLoader:
 
                         # 如果是图片标记
                         if fragment.is_image_mark:
-                            # 渲染图片
+                            # 渲染图片（设计分辨率坐标）
                             image = fragment.render_image()
                             if image:
                                 # 计算图片位置（垂直居中于行高）
@@ -1277,12 +1285,12 @@ class DynamicLoader:
                     image = image.subsurface(pygame.Rect(
                         clip_x, clip_y, safe_w, safe_h))
 
-            # 3. [缩放]
+            # 3. [缩放] 指定了 size 才缩放（设计分辨率坐标）
             size = metadata.get('size')
             if size:
-                target_width, target_height = size
-                image = pygame.transform.scale(
-                    image, (target_width, target_height))
+                final_width, final_height = size
+                if final_width > 0 and final_height > 0 and (final_width, final_height) != image.get_size():
+                    image = pygame.transform.smoothscale(image, (final_width, final_height))
 
             # 绘制
             screen.blit(image, (x, y))

@@ -15,3 +15,6 @@ python-dotenv==1.2.1
 python-rtmidi==1.5.8
 tqdm==4.67.1
 typing==3.7.4.3
+# MCP 调试服务（开发用，见 events/调试相关/MCP接口.py；发布可在 config.json 关闭 mcp_enabled）
+mcp>=2.0
+uvicorn>=0.30
