@@ -7,6 +7,7 @@ class MusicBox:
         :param url: 音乐文件路径，可以是绝对路径或相对路径
         """
         # 初始化pygame mixer模块
+    
         pygame.mixer.init(frequency=44100, size=-16, channels=2, buffer=4096)
         
         self.url = url
@@ -16,14 +17,32 @@ class MusicBox:
         if url and os.path.exists(url):
             self.load_music(url)
     
+    def _resolve_music_file(self, url):
+        """
+        [MID渲染管线] .mid 优先解析为同名音频缓存（.ogg/.wav）。
+        缓存由 tools/mid渲染.py 用 FluidSynth+音色库预渲染生成，
+        pygame.mixer 直接播音频，绕开 Windows GS Wavetable 的劣质合成。
+        无缓存时原样返回路径（保持老的 mid 行为）。
+        """
+        if not url or not isinstance(url, str) or \
+                not url.lower().endswith(('.mid', '.midi')):
+            return url
+        base = url[: url.rfind('.')]
+        for ext in ('.ogg', '.wav'):
+            candidate = base + ext
+            if os.path.exists(candidate):
+                return candidate
+        return url
+
     def load_music(self, url):
         """
         加载音乐文件
-        :param url: 音乐文件路径
-        :return: 成功加载返回True，否则返回False
+        :param url: 音乐文件路径，可以是绝对路径或相对路径
+        :return: 加载成功返回True，否则返回False
         """
         try:
             if os.path.exists(url):
+                url = self._resolve_music_file(url)
                 pygame.mixer.music.load(url)
                 self.url = url
                 print(f"已加载音乐: {url}")
