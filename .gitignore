@@ -8,3 +8,8 @@ tools/fluidsynth/
 tools/soundfonts/*.sf2
 tools/soundfonts/*.sf3
 .zcode/plans/
+
+# SF2特化版 pygame 的构建工程（源码树/依赖包/产物 wheel，约60MB；
+# 产物已发布到 GitHub Release pygame-sf2-1，见 SoundFont_c_dll 内 README）
+/SoundFont_c_dll/
+pygame-2.6.1+sf2.2-pera

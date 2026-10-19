@@ -10,7 +10,12 @@ packaging==25.0
 pillow==11.3.0
 proglog==0.1.12
 pyfluidsynth==1.3.4
-pygame==2.6.1
+# ── SF2 特化版 pygame（SDL2_mixer 带 FluidSynth 后端 + 新接口 music.load(filename, sf2url)，
+#    见 doc/音乐渲染管线.md）──
+# GitHub Release 直链（tag pygame-sf2-2）。win64 + Python 3.13 之外的环境自动回退官方版
+# pygame（此时 mid 走 ogg 预渲染管线，Musicbox 会自动检测兜底）。
+pygame @ https://github.com/lingdong0128-sys/Pera-tohoFOD/releases/download/pygame-sf2-2/pygame-2.6.1%2Bsf2.2-cp313-cp313-win_amd64.whl ; sys_platform == 'win32' and python_version == '3.13'
+pygame==2.6.1 ; sys_platform != 'win32' or python_version != '3.13'
 python-dotenv==1.2.1
 python-rtmidi==1.5.8
 tqdm==4.67.1
